@@ -6,16 +6,58 @@ from .models import Office, Doctor, Patient, Appointment
 import requests
 import pycountry
 import datetime
+import functools
+import inspect
 import pytz
 import re
 
+from functools import wraps
 from operator import itemgetter
 from dateutil.parser import parse as dateparse
 
 api='https://drchrono.com/api'
 
 
-def json_get(url, params=None, headers=None):
+def fstamp(f):
+    ''' just print a path.to.module.function() to trace flow
+    '''
+    @wraps(f)
+    def __wrapper__(*args, **kwargs):
+        print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__,f.__name__))
+        return f(*args, **kwargs)
+
+    return __wrapper__
+
+
+def check_refresh_token(f):
+    ''' decorator to apply to all API calling functions
+    '''
+    @wraps(f)
+    def __wrapper__(*args, **kwargs):
+        # check if our session has expired
+        user = UserSocialAuth.objects.get()
+        extra_data    = user.extra_data
+        refresh_token = extra_data['refresh_token']
+        auth_time     = datetime.datetime.fromtimestamp(extra_data['auth_time'])
+        expires_in    = datetime.timedelta(extra_data['expires_in'])
+        expires_time  = auth_time + expires_in
+
+        print('ed: {}'.format(extra_data))
+        if datetime.datetime.now() > expires_time:
+            print('need to refresh our token')
+            # so do it...
+            x = user.refresh_token(refresh_token)
+            print(x)
+        else:
+            print('not refreshing token')
+
+        return f(*args, **kwargs)
+
+    return __wrapper__
+
+
+@check_refresh_token
+def json_get(url: str, params=None, headers=None):
     data=[]
     while url:
         print('retrieving: {} params: {}'.format(url, params))
@@ -28,7 +70,7 @@ def json_get(url, params=None, headers=None):
     return data
 
 
-def ISO_639(key):
+def ISO_639(key: str):
     if key in (None, '', 'blank'):
         key='eng'
 
@@ -51,14 +93,14 @@ def model_to_dict(instance):
     return data
 
 
-def seconds_to_text(s):
+def seconds_to_text(s: int):
     h = str(int(s/60/60%24))
     m = str(int(s/60%60))
     s = str(int(s%60))
     return ':'.join((h,m,s))
 
 
-def update_patient_cache(request, get_all=False):
+def update_patient_cache(request, get_all: bool =False):
     ''' cache priming setup; as the application runs, the WAMP module
         ought to append/update/delete single items as they occur
     '''
@@ -125,7 +167,7 @@ def update_patient_cache(request, get_all=False):
                 o.delete()
 
 
-def update_appointment_cache(request, get_all=False, get_specific=False):
+def update_appointment_cache(request, get_all: bool =False, get_specific: bool =False):
     ''' cache priming setup; as the application runs, the WAMP module
         ought to append/update/delete single items as they occur
     '''
@@ -201,7 +243,8 @@ def update_appointment_cache(request, get_all=False, get_specific=False):
                 o.delete()
 
 
-def patch_appointment(request, appointment_id, patchdata):
+@check_refresh_token
+def patch_appointment(request, appointment_id: int, patchdata):
     access_token = UserSocialAuth.objects.get().extra_data['access_token']
     headers      = {'Authorization': 'Bearer %s' % access_token,}
     doctor       = request.session['doctor']
@@ -216,27 +259,35 @@ def patch_appointment(request, appointment_id, patchdata):
     print(response)
 
 
-def create_appointment(request, patient, reason=None, is_walk_in=False, exam_room=None, status=None):
+@check_refresh_token
+def create_appointment(request, patient, scheduled_time, duration: int =None, reason: str =None, is_walk_in: bool =False, exam_room: int =None, status: str =None):
+    ''' Initial version of this, we can't fill in a number of things yet
+        as we aren't using appointment profiles and the only caller of
+        this presently, is a patient walk-in
+    '''
     access_token = UserSocialAuth.objects.get().extra_data['access_token']
     headers      = {'Authorization': 'Bearer %s' % access_token,}
     doctor       = request.session['doctor']
     office       = request.session['office']
 
-    url = api+'/appointments/'
+    url = api+'/appointments'
 
-    data = {
-        'doctor':         doctor,
-        'duration':       None,
-        'office':         office,
-        'patient':        patient.id,
-        'scheduled_time': None,
-        'reason':         reason or '',
-        'is_walk_in':     is_walk_in,
+    patchdata = {
+        'doctor':         doctor,                 # required
+        'duration':       duration or 30,         # required (if no profile)
         'exam_room':      exam_room or 0,         # required
+        'office':         office,                 # required
+        'patient':        patient.id,             # required
+        'scheduled_time': scheduled_time,         # required
+        'is_walk_in':     is_walk_in,
+        'reason':         reason or '',
         'status':         status or '',
     }
 
     print('patching API: {}, to {}'.format(url, patchdata))
+    response = requests.post(url, data=patchdata, headers=headers)
+    response.raise_for_status()
+    print(response.body)
 
 
 def find_avail_timeslots(schedule, skip=None):
@@ -270,6 +321,9 @@ def find_avail_timeslots(schedule, skip=None):
             avail_d = s - avail_t
             if avail_d < min_duration:
                 continue
+
+            # only give the PT 30 minutes by default
+            avail_d = min_duration
 
             avail.append((avail_t, int(avail_d.total_seconds()/60) ))
 
