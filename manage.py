@@ -5,7 +5,7 @@ import sys
 if 'runserver' in sys.argv:
     ekeys = [k for k in os.environ]
     for k in ekeys:
-        if k in ('TZ','PWD','PATH','DJANGO_SETTINGS_MODULE','RUN_MAIN','LANG','PYTHONIOENCODING'):
+        if k in ('TZ','PWD','PATH','DJANGO_SETTINGS_MODULE','RUN_MAIN','LANG','PYTHONIOENCODING','LANGUAGE','LC_ALL'):
             continue
         del os.environ[k]
         print('deleted {}'.format(k))
