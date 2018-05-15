@@ -78,7 +78,7 @@ $(document).ready(function() {
             },
 
             success: function(data) {
-                console.log('update the api',data['result']);
+                console.log('update the api',data);
                 // TODO: make a smiley face somewhere
             },
 
@@ -155,43 +155,61 @@ $(document).ready(function() {
         // store context
         var oldname, newname, _this = $(this);
 
-        // scramble the name so chrome can't use autofill/autocomplete
-        // what a horrible idea for public computers...
+        // scramble the name so chrome/webkit can't use autofill/autocomplete.
+        // note, yes, there is an "autocomplete=off", but chrome distinctly
+        // ignores it. chrome used to only ignore autocomplete in certain
+        // circumstances but recent releases of chrome rabidly avoid every
+        // known method to disable autofill and we can't ask doctors and
+        // receptionists to manage advanced chrome://settings flags and
+        // command line options.
+        //
+        // the only known way to handle this now is to scramble the 'name'
+        // attribute and make sure placeholder doesn't appear to be 'name'
+        // either.
+        //
+        // what a horrible idea for public devices...
         oldname = _this.attr('name');
-        newname = Math.random().toString(36).replace(/[^a-z]+/g, '');
+        newname = (Math.random().toString(36)+
+                   Math.random().toString(36))
+                    .replace(/[^a-z]+/g, '');
 
         fieldnames.push({name: oldname, smashed: newname});
         _this.attr('name', newname);
 
-        $(_this).autocomplete({
-            source: function(request, response) {
-                var name, smashed;
+        if (oldname === 'name') {
+            // update the label too
+            $(_this).prev('label').attr('for', newname);
 
-                name = $('input').find('name', unsmash($(_this).attr('name'))).val();
+            $(_this).autocomplete({
+                source: function(request, response) {
+                    var name, smashed;
 
-                $.ajax({
-                    url:      '/ajax/checkin/autocomplete/',
-                    dataType: 'jsonp',
-                    data: {
-                        term: request.term,
-                        name: name,
-                    },
+                    name = $('input').find('name', unsmash($(_this).attr('name'))).val();
 
-                    success: function(data) {
-                        response(data['result']);
-                    },
+                    $.ajax({
+                        url:      '/ajax/checkin/autocomplete/',
+                        dataType: 'jsonp',
+                        data: {
+                            term: request.term,
+                            name: name,
+                        },
 
-                    error: function(xhr, textStatus, err){
-                        console.log(xhr, textStatus, err);
-                    },
+                        success: function(data) {
+                            response(data['result']);
+                        },
 
-                });
-            },
-            minLength: 1,
-            select: function(event, ui) {
-                //console.log("Selected: "+ui.item.value);
-            }
-        });
+                        error: function(xhr, textStatus, err){
+                            console.log(xhr, textStatus, err);
+                        },
+
+                    });
+                },
+                minLength: 1,
+                select: function(event, ui) {
+                    //console.log("Selected: "+ui.item.value);
+                }
+            });
+        }
     });
 
     $('form.check-in').on('click', 'button[name=check]', function() {
