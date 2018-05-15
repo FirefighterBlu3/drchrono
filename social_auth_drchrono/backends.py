@@ -11,7 +11,7 @@ from social_core.backends.oauth import BaseOAuth2
 from social_django.models import UserSocialAuth
 
 from drchrono.models import Office, Doctor
-from drchrono.utils import json_get
+from drchrono.utils import fstamp, json_get
 
 api='https://drchrono.com/api'
 
@@ -31,19 +31,22 @@ class drchronoOAuth2(BaseOAuth2):
         ('expires_in', 'expires_in'),
     ]
     # TODO: setup proper token refreshing
+    REFRESH_TOKEN_URL   = ACCESS_TOKEN_URL
 
+
+
+    @fstamp
     def get_auth_header(self, access_token):
-        print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
         #logger = logging.getLogger(__name__)
         #logger.warn("access_token={}".format(access_token))
         return {'Authorization': 'Bearer {0}'.format(access_token)}
 
 
+    @fstamp
     def user_data(self, access_token, *args, **kwargs):
         """
         Load user data from the service
         """
-        print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
         logger = logging.getLogger(__name__)
         logger.warn(">> args={} kwargs={}".format(args, kwargs))
         logger.warn(">> {}".format(self.USER_DATA_URL))
@@ -54,11 +57,11 @@ class drchronoOAuth2(BaseOAuth2):
         )
 
 
+    @fstamp
     def get_user_details(self, response):
         """
         Return user details from drchrono account
         """
-        print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
         # this shows our initial scope data, leave it for dbg
         print('response data: {}'.format(response))
@@ -131,3 +134,15 @@ class drchronoOAuth2(BaseOAuth2):
         del oids
 
         return {'username': response['username']}
+
+
+    @fstamp
+    def refresh_token(self, token, *args, **kwargs):
+        ''' in-work
+        '''
+        params = self.refresh_token_params(token, *args, **kwargs)
+        request = self.request(self.REFRESH_TOKEN_URL or self.ACCESS_TOKEN_URL,
+                               data=params, headers=self.auth_headers(),
+                               method='POST')
+        return self.process_refresh_token_response(request, *args, **kwargs)
+
