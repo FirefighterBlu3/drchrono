@@ -18,6 +18,7 @@ urlpatterns = [
     url(r'^ajax/see-patient/$',    views.ajax_see_patient,      name='ajax_see_patient'),
     url(r'^ajax/checkin/autocomplete/$', views.ajax_checkin_autocomplete, name='ajax_checkin_autocomplete'),
     url(r'^ajax/checkin/appointments/$', views.ajax_checkin_appointments, name='ajax_checkin_appointments'),
+    url(r'^ajax/checkin/appointment/create/$', views.ajax_checkin_appointment_create, name='ajax_checkin_appointment_create'),
     url(r'^ajax/checkin/complete/$', views.ajax_checkin_complete, name='ajax_checkin_complete'),
     url(r'^ajax/checkin/demographics/$', views.ajax_checkin_demographics, name='ajax_checkin_demographics'),
     url(r'^ajax/walkin/find_time/$', views.ajax_walkin_find_avail_time, name='ajax_walkin_find_avail_time'),
