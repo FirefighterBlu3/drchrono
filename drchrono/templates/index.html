@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% load staticfiles %}
+{% block content %}
+
+<div align="center" style="padding-top: 250px;">
+    <!-- start the social_django with oauth2 class.name=drchrono -->
+  <a type="button" class="btn btn-info btn-lg" href="{% url 'social:begin' 'drchrono' %}">Doctor Login</a>
+</div>
+
+{% endblock %}

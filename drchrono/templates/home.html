@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% load staticfiles %}
+{% block content %}
+
+  <!-- if more than one office, select office for this kiosk
+  {# if offices|length > 1 #}
+  {# for office in offices #}
+  -->
+  <form method="post" action="{% url 'kiosk_path' %}" align="center"
+      autocomplete="off"
+      class="form-group kiosk-setup">
+    {% csrf_token %}
+    <div class="btn-group btn-group-toggle" data-toggle="buttons">
+    {{ form }}
+    </div>
+    <br>
+    <button type="submit" class="btn btn-info btn-lg" name="path" value="drchrono_home">Doctor Interface</button>
+    <button type="submit" class="btn btn-info btn-lg" name="path" value="kiosk_home">Kiosk Mode</button>
+</form>
+<div id="spinner-box">
+  <p>Preparing Kiosk...</p>
+  <div id="spinner"></div>
+</div>
+
+<script src="{% static 'js/home.js' %}"></script>
+{% csrf_token %}
+
+{% endblock %}

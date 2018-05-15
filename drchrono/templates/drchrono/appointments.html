@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% load staticfiles %}
+{% block content %}
+{% load tz %}
+{% timezone 'US/Eastern' %}
+{% localtime on %}
+
+<h2><center>Appointments for {{ today }}</center></h2>
+<br>
+<table class="table table-condensed table-striped table-appointments">
+    <thead">
+        <tr>
+            <th></th>
+            <th>Name</th>
+            <th>Preferred<br>Language</th>
+            <th>Appointment<br>Time</th>
+            <th>Exam Room</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Check In Time</th>
+            <th>Wait Time</th>
+            <th>See Patient</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for a in appointments %}
+            <tr patient-id="{{ a.id }}">
+                <td><img class="patient-photo" src="{{ a.patient.patient_photo }}"/></td>
+                <td>{{ a.patient.first_name }} {{ a.patient.last_name }}</td>
+                <td>{{ a.preferred_language_full }}</td>
+                <td class="scheduled-time align-as-clocktime">
+                    <span class="scheduled-time-epoch">{{ a.scheduled_time|date:"U" }}</span>
+                    <span class="scheduled-time-display">{{ a.scheduled_time|time:"g:iA"|lower }}, {{ a.duration }}m
+                    </span>
+                </td>
+                <td>{{ a.exam_room }}</td>
+                <td>{{ a.reason }}</td>
+                <td class="status">{{ a.status }}</td>
+                <td class="arrived-time">
+                    <span class="arrived-time-epoch">{{ a.arrived_time|date:"U" }}</span>
+                    <span class="arrived-time-display">{{ a.arrived_time|time:"g:iA"|lower }}</span>
+                </td>
+                <td class="timer">
+                    <span class="wait-time-seconds">{{ a.wait_time_seconds }}</span>
+                    <span class="wait-time-display">{{ a.wait_time_display }}</span>
+                </td>
+                <td class="see-patient">
+                    <input type="checkbox"
+                    {% if a.seen_time %}
+                     checked="checked"
+                     seen-in-db="true"
+                     seen-time="{{ a.seen_time|date:"U" }}"
+                    {% endif %}
+                    >
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <th colspan="8">Average wait time for today:</th>
+            <th id="avg-wait-time-for-today"></th>
+            <th></th>
+        </tr>
+        <tr>
+            <th colspan="8">Average wait time overall:</th>
+            <th id="avg-wait-time-overall"
+                server-sum="{{ waittimes_sum }}"
+                server-length="{{ waittimes_len }}"
+                ></th>
+            <th></th>
+        </tr>
+    </tfoot>
+</table>
+
+<script src="{% static 'js/appointments.js' %}"></script>
+{% csrf_token %}
+
+{% endlocaltime %}
+{% endtimezone %}
+{% endblock %}

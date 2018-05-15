@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load staticfiles %}
+{% block content %}
+
+<h2>Please review and make any changes then press Save</h2>
+
+<legend></legend>
+<br>
+
+<form method="post" action="{% url 'kiosk_checked_in' %}" align="center" class="form-group col-xs-3 col-xs-offset-4">
+    {% csrf_token %}
+    <div>
+        {{ form.as_p }}
+        <br>
+        <button id="arrived" type="submit" class="btn btn-primary">Save</button>
+    </div>
+</form>
+
+{% endblock %}
