@@ -33,7 +33,7 @@ $(document).ready(function() {
                         .slideDown();
 
                 } else {
-                    for (i in data['result']) {
+                    for (var i in data['result']) {
                         var tm=data['result'][i];
 
                         buttons.push($('<li><button \
