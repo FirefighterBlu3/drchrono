@@ -44,7 +44,7 @@ $(document).ready(function() {
 
                     $('div.walk-in-appointment-selection')
                         .empty()
-                        .append($('<p>Available Walk-in times</p>'))
+                        .append($('<p>Select available walk-in time</p>'))
                         .append($('<ul/>'))
                         .children('ul')
                         .append(buttons)
@@ -87,6 +87,7 @@ $(document).ready(function() {
             },
 
         });
+
         return aj;
     }
 
@@ -126,7 +127,30 @@ $(document).ready(function() {
     }
 
     function create_appointment(name, dob, appointment_time) {
+        var aj, csrf;
 
+        csrf = $('input[name=csrfmiddlewaretoken]').val();
+        aj = $.post({
+            url:      '/ajax/checkin/appointment/create/',
+            dataType: 'json',
+            data: {
+                name: name,
+                dob:  dob,
+                appointment_time: appointment_time,
+                csrfmiddlewaretoken: csrf,
+            },
+
+            success: function(data) {
+                console.log(data);
+            },
+
+            error: function(xhr, textStatus, err){
+                console.log(xhr, textStatus, err);
+            },
+
+        });
+
+        return aj;
     }
 
     $('input[type=date]').on('change', function() {
@@ -231,7 +255,7 @@ $(document).ready(function() {
                 .animate({
                     borderWidth:'2px',
                     borderColor:'#bbbbbb'
-                }, 500)
+                }, 500);
 
             return false;
         }
@@ -320,11 +344,11 @@ $(document).ready(function() {
                     // patient, or deleted the appointment AS the patient
                     // was checking in
                     console.error(e);
-                })
+                });
         }
     });
 
-    $('form.check-in').on('click', 'div.walk-in-appointment-selection button.appointment-select', function() {
+    $('form.check-in').on('click', 'div.walk-in-appointment-selection button.walk-in-appointment-select', function() {
         // walk-in appt selected, see if we can get patient demographics,
         // then create a new appointment and check in the patient (done on
         // creation success)
@@ -334,12 +358,25 @@ $(document).ready(function() {
         name = $('input[name='+name+']').val();
         dob  = $('div.pre-checkin input[type=date]').attr('data-date');
 
-        fetch_demographics(name, dob);
-        create_appointment(name, dob, $(this).text());
+        console.log(name,dob);
+
+        create_appointment(name, dob, $(this).text())
+            .done(function (data) {
+                console.log(data);
+                // check_in_patient(name, dob, appointment_id)
+                //     .done(function (){
+                //             $('div.demographics')
+                //                 .find('input')
+                //                 .val('');
+
+                //             fetch_demographics(name, dob);
+                //     });
+            });
+
     });
 
     $('form.check-in').on('click', 'button[name=demographics-complete]', function() {
-        $('form.check-in').submit();
+        //$('form.check-in').submit();
     });
 
 });
