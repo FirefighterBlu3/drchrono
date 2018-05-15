@@ -17,8 +17,9 @@ from social_django.models import UserSocialAuth
 #Project
 from .models import Office, Doctor, Patient, Appointment
 from .forms import KioskSetupForm, PatientAppointmentForm, DemographicForm
-from .utils import json_get, ISO_639, model_to_dict, update_patient_cache, update_appointment_cache
-from .utils import patch_appointment, seconds_to_text, find_avail_timeslots
+from .utils import fstamp, check_refresh_token, json_get, ISO_639, model_to_dict
+from .utils import update_appointment_cache, patch_appointment, seconds_to_text
+from .utils import find_avail_timeslots, create_appointment, update_patient_cache
 
 #Python
 import datetime
@@ -38,10 +39,10 @@ api='https://drchrono.com/api'
 # todo: split this into kiosk/views.py and doctor/views.py ...
 
 @csrf_exempt
+@fstamp
 def webhook(request):
     ''' API callback mechanism
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
     for k,v in request.META.items():
         print('whk  {:>40}: {}'.format(k,v))
@@ -63,7 +64,7 @@ def webhook(request):
         print('unrecognized sender, dropping')
         return HttpResponse("i don't know you", status=401)
 
-    event = request.META.get('HTTP_X_DRCHRONO_EVENT')
+    event: str = request.META.get('HTTP_X_DRCHRONO_EVENT')
     data = json.loads(request.body)
     print('Received webhook for: {}'.format(event))
 
@@ -72,25 +73,32 @@ def webhook(request):
         for k,v in data[obj].items():
             print('    {:>30}: {}'.format(k,v))
 
+    if event.startswith('APPOINTMENT_'):
+        update_appointment_cache()
+    elif event.startswith('PATIENT_'):
+        update_patient_cache()
+    elif event.startswith('VACCINE_'):
+        update_patient_cache()
+
     return JsonResponse({'hi':'tyty'})
 
 
+@fstamp
 def home(request):
     '''Doctor; kiosk office choice and interface path
     '''
-
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
     data = {
         'offices':Office.objects.all(),
         'form': KioskSetupForm()
     }
 
-    request.session['doctor'] = Doctor.objects.get(user=UserSocialAuth.objects.get().user).id
+    request.session['doctor']: int = Doctor.objects.get(user=UserSocialAuth.objects.get().user).id
 
     return render(request, 'home.html', data)
 
 
+@fstamp
 def kiosk_path(request):
     ''' This is an interstitial that collects the POST data for the office selection
         and starts the tablet in either Doctor or Kiosk mode
@@ -98,13 +106,15 @@ def kiosk_path(request):
         TODO: put the cache priming behind WAMP for asynchronous updates that
         don't block the startup
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
-    request.session['office'] = request.POST['office']
+    if not request.method == 'POST':
+        raise SuspiciousOperation
+
+    request.session['office']: int = int(request.POST['office'], 10)
 
     update_patient_cache(request, get_all=True)
     update_appointment_cache(request, get_all=True)
-    path = request.POST['path']
+    path: str = request.POST['path']
 
     if not path in ('drchrono_home', 'kiosk_home'):
         return HttpResponseRedirect(reverse('home'))
@@ -112,39 +122,39 @@ def kiosk_path(request):
     return HttpResponseRedirect(reverse(path))
 
 
+@fstamp
 def drchrono_home(request):
     '''Doctor can pick to view appointment list
     '''
-
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
     print(request.POST)
     return render(request, 'drchrono/home.html')
 
 
+@fstamp
 def drchrono_login(request):
     ''' not impl yet
     '''
 
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
-
     return render(request, 'drchrono/login.html')
 
 
+@fstamp
 def drchrono_logout(request):
     ''' also not impl yet
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
+
     logout(request)
 
     #return HttpResponseRedirect(reverse('index'))
     return render(request, 'drchrono/logout.html')
 
 
+@fstamp
 def drchrono_appointments(request):
     '''
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
+
     now = datetime.datetime.now(pytz.utc) \
                            .astimezone(pytz.timezone('US/Eastern')) \
                            .replace(hour=0, minute=0, second=0, microsecond=0)
@@ -168,135 +178,117 @@ def drchrono_appointments(request):
         })
 
 
+@fstamp
 def kiosk_home(request):
     '''Doctor can pick to view appointment list or patient check in
     '''
 
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
-
     return render(request, 'kiosk/home.html')
 
 
+@fstamp
+@check_refresh_token
 def kiosk_check_in(request):
     '''
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
-
-    # TODO: offer an autofill list for checking in
-
     return render(request, 'kiosk/check_in.html')
 
 
+@fstamp
 def kiosk_demographics(request):
     ''' Patient has provided their demographic data after check-in. Verify we have
         an existing record for them.
 
-        0. they are an existing patient and are on today's schedule with only one appointment
+        0. they are an existing patient and are on today's schedule with 1+ appointment
 
         *** these conditions are not handled yet ***
         1. if they are a walk-in, they may already have a patient record in the API
         2. they may be a wholly new patient and no record exists for them
         3. they may have made a typo
-        4. there may be multiple appointments for this person for today
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
-    if request.method == 'POST':
-        print(request.POST)
-        dob  = dateparse(request.POST['date_of_birth']).strftime('%F')
-        first_name = request.POST.get('first_name')
-        last_name = request.POST.get('last_name')
-        appt = request.POST.get('appointment-selection')
+    if not request.method == 'POST':
+        raise SuspiciousOperation
 
-        print('demo_in: {}, {}'.format(name, dob))
-        query = Q(patient__first_name__iexact=first_name)
-        query.add(Q(patient__last_name__iexact=last_name), Q.AND)
-        query.add(Q(patient__date_of_birth=dob), Q.AND)
+    print(request.POST)
+    first_name: str = request.POST.get('first_name')
+    last_name: str = request.POST.get('last_name')
+    appt: str = request.POST.get('appointment-selection')
+    dob: str  = request.POST['date_of_birth']
+    dob  = dateparse(dob).strftime('%F')
 
-        try:
-            patient = Patient.objects.get(query)
+    query = Q(first_name__exact=first_name)
+    query.add(Q(last_name__exact=last_name), Q.AND)
+    query.add(Q(date_of_birth=dob), Q.AND)
 
-        except Patient.MultipleObjectsReturned:
-            print('*** more than one copy of this patient?')
-            pts = Patient.objects.filter(query).all()
+    try:
+        patient = Patient.objects.get(query)
 
-            print('Duplicates: {}'.format(pts.count()))
-            for p in pts:
-                print('Dupe: #{}'.format(p.id))
-                for k,v in p:
-                    print('  {:>30}: {}'.format(k,v))
-                print()
+    except Patient.MultipleObjectsReturned:
+        print('*** more than one copy of this patient?')
+        ''' here we ought to collect all the apparent duplicate
+            patients and send an email off to someone that can
+            resolve the issue. automatic bug issue filer? would
+            be nice
+        '''
+        pts = Patient.objects.filter(query).all()
 
-            messages.error(request, 'Error: Multiple instances of you, please see receptionist')
-            return HttpResponseRedirect(reverse('kiosk_check_in'))
+        print('Duplicates: {}'.format(pts.count()))
+        for p in pts:
+            print('Dupe: #{}'.format(p.id))
+            for k,v in p:
+                print('  {:>30}: {}'.format(k,v))
+            print()
 
-        except Patient.DoesNotExist:
-            print('Creating a new patient: {}'.format(request.POST))
-            f, l = name.split(' ',1)
-            patient = Patient(
-                    first_name=f,
-                    last_name=l,
-                    date_of_birth=dob
-                )
+        messages.error(request, 'Error: Multiple instances of you in database, please see receptionist to check in')
+        return HttpResponseRedirect(reverse('kiosk_check_in'))
 
-        # locate the appointment record, if it doesn't exist, this is a walk-in
-        # TODO
-
-        request.session['drchrono_patient_checked_in']=patient.id
-
-        if appt == 'Walk-in':
-            print('creating a new appointment')
-            # check the schedule, find the next available slot
-
-        else:
-            try:
-                a = Appointment.objects.get(patient_id=patient.id)
-            except Appointment.MultipleObjectsReturned:
-                # TODO, redirect to a screen to choose which appt to check in for
-                messages.error(request, 'App not designed for multiple appts per day yet')
-            except Appointment.DoesNotExist:
-                # TODO, this is a walk-in
-                messages.error(request, 'App not designed for walk-ins yet')
-            else:
-                a.status = 'Checked In'
-                a.arrived_time = datetime.datetime.now(pytz.utc)
-                a.save()
-                for k,v in a:
-                    print('  {:>30}: {!r}'.format(k,v))
-
-                patch_appointment(request, a.id, {'status':a.status})
-
-                form = DemographicForm(instance=patient)
-                return render(request, 'kiosk/demographics.html', {'form':form})
-
-    messages.error(request, 'Error: Please re-enter your information')
-    return HttpResponseRedirect(reverse('kiosk_check_in'))
+    except Patient.DoesNotExist:
+        print('Creating a new patient: {}'.format(request.POST))
+        f, l = name.split(' ',1)
+        patient = Patient(
+                first_name=f,
+                last_name=l,
+                date_of_birth=dob
+            )
 
 
+    #patch_patient(request, a.id, {'status':a.status})
+
+    form = DemographicForm(instance=patient)
+    return render(request, 'kiosk/checked_in.html', {'form':form})
+
+
+@fstamp
 def kiosk_checked_in(request):
     '''
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
+
+    if not request.method == 'POST':
+        raise SuspiciousOperation
+
     patient = Patient.objects.get(id=request.session['drchrono_patient_checked_in'])
 
-    if request.method == 'POST':
-        print(request.POST)
-        form = DemographicForm(request.POST)
-        if form.is_valid():
-            form.save()
+    print(request.POST)
+    form = DemographicForm(request.POST)
+    if form.is_valid():
+        form.save()
 
-
-    doctor = request.session['doctor']
+    doctor: int = request.session['doctor']
     return render(request, 'kiosk/checked_in.html', {'doctor': Doctor.objects.get(id=doctor)})
 
 
+@fstamp
 def ajax_see_patient(request):
     '''
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
-    id     = request.POST.get('id')
-    status = request.POST.get('status')
+    if not request.method == 'POST':
+        raise SuspiciousOperation
+
+    id          = request.POST.get('id')
+    status: str = request.POST.get('status')
+
     appt   = Appointment.objects.get(id=id)
 
     if status == "true":
@@ -318,10 +310,10 @@ def ajax_see_patient(request):
     return JsonResponse({'hi':'tyty', 'status':status})
 
 
+@fstamp
 def ajax_checkin_autocomplete(request):
     '''
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
     now = datetime.datetime.now(pytz.utc) \
                            .astimezone(pytz.timezone('US/Eastern')) \
@@ -349,11 +341,14 @@ def ajax_checkin_autocomplete(request):
     return HttpResponse(response_prose, "text/javascript")
 
 
+@fstamp
 def ajax_checkin_appointments(request):
     ''' Intent is to provide a list of times if there is more than one appointment
         for this patient
     '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
+
+    if not request.method == 'GET':
+        raise SuspiciousOperation
 
     now = datetime.datetime.now(pytz.utc) \
                            .astimezone(pytz.timezone('US/Eastern')) \
@@ -383,7 +378,10 @@ def ajax_checkin_appointments(request):
     query.add(Q(patient__id=patient.id), Q.AND)
 
     try:
-        data = [o for o in Appointment.objects.filter(query).order_by('patient__first_name')]
+        data = [o for o in Appointment.objects
+                            .filter(query)
+                            .order_by('scheduled_time', 'patient__first_name')]
+
     except Appointment.DoesNotExist:
         # probably a walk-in
         results = [[-1,"I want a walk-in appointment"]]
@@ -411,11 +409,13 @@ def ajax_checkin_appointments(request):
     return HttpResponse(response_prose, "text/javascript")
 
 
+@fstamp
 def ajax_walkin_find_avail_time(request):
     ''' Try to find the next available time slot for a walk-in appointment
     '''
 
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
+    if not request.method == 'GET':
+        raise SuspiciousOperation
 
     # iterate all of today's appointments, collect their start time+duration
     # build a map of open slots that are at least NN minutes (duration) available
@@ -442,11 +442,52 @@ def ajax_walkin_find_avail_time(request):
     return HttpResponse(response_prose, "text/javascript")
 
 
-def ajax_checkin_complete(request):
+@fstamp
+def ajax_checkin_appointment_create(request):
+    ''' Patient has requested a walk-in appointment
     '''
-    '''
-    print('\x1b[1;36m{}.{}()\x1b[0m'.format(__name__, inspect.stack()[0][3]))
 
+    if not request.method == 'POST':
+        raise SuspiciousOperation
+
+    print(request.POST)
+    name = request.POST.get('name').lower()
+    appt = request.POST.get('appointment_time')
+    dob  = request.POST.get('dob')
+
+    # verify the patient exists in our DB
+    try:
+        dob = dateparse(dob).strftime('%F')
+        appt_time = pytz.timezone('US/Eastern').localize( dateparse(appt.split()[0]) )
+        print('appt time: {}'.format(appt_time))
+
+    except:
+        print('newp')
+        raise SuspiciousOperation
+
+    queryset=Patient.objects.annotate(search_name=Concat('first_name',
+                                                          Value(' '),
+                                                         'last_name'))
+    try:
+        patient = queryset.get(search_name__iexact=name,
+                                date_of_birth=dob)
+
+    except Patient.DoesNotExist:
+        return JsonResponse({'status':'unknown patient'})
+
+    # create appt
+    create_appointment(request, patient, scheduled_time=appt_time, is_walk_in=True, duration=30)
+
+    # return appt id
+
+    return JsonResponse({'status':'tyty'})
+
+
+@fstamp
+def ajax_checkin_complete(request):
+    ''' Patient correctly identified self and selected their
+        appointment time
+    '''
 
     if not request.method == 'POST':
         raise SuspiciousOperation
@@ -454,7 +495,7 @@ def ajax_checkin_complete(request):
     print(request.POST)
     name = request.POST.get('name').lower()
     appt = int(request.POST.get('appointment_id'), 10)
-    dob = request.POST.get('dob')
+    dob  = request.POST.get('dob')
 
     form = PatientAppointmentForm({
         'id':appt,
@@ -489,9 +530,13 @@ def ajax_checkin_complete(request):
     return JsonResponse({'hi':'tyty'})
 
 
+@fstamp
 def ajax_checkin_demographics(request):
     '''
     '''
+    if not request.method == 'GET':
+        raise SuspiciousOperation
+
     callback = request.GET.get('callback')
     name     = request.GET.get('name').lower()
 
