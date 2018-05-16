@@ -36,6 +36,13 @@ from drchrono.settings import SOCIAL_AUTH_DRCHRONO_KEY, SOCIAL_AUTH_DRCHRONO_SEC
 
 api='https://drchrono.com/api'
 
+# our webhook view needs some way to know who the current doc/office is.
+# unfortunately the webhook doesn't share session data with the kios. as
+# we may have more than one doctor stored in the DB, for now let's rely
+# on the KISS global variable
+doctor=None
+office=None
+
 # todo: split this into kiosk/views.py and doctor/views.py ...
 
 @csrf_exempt
@@ -74,11 +81,11 @@ def webhook(request):
             print('    {:>30}: {}'.format(k,v))
 
     if event.startswith('APPOINTMENT_'):
-        update_appointment_cache()
+        update_appointment_cache(request, doctor, office)
     elif event.startswith('PATIENT_'):
-        update_patient_cache()
+        update_patient_cache(request, doctor, office)
     elif event.startswith('VACCINE_'):
-        update_patient_cache()
+        update_patient_cache(request, doctor, office)
 
     return JsonResponse({'hi':'tyty'})
 
@@ -106,11 +113,16 @@ def kiosk_path(request):
         TODO: put the cache priming behind WAMP for asynchronous updates that
         don't block the startup
     '''
+    global doctor, office
+
 
     if not request.method == 'POST':
         raise SuspiciousOperation
 
     request.session['office']: int = int(request.POST['office'], 10)
+
+    doctor = request.session['doctor']
+    office = request.session['office']
 
     update_patient_cache(request, get_all=True)
     update_appointment_cache(request, get_all=True)

@@ -100,14 +100,16 @@ def seconds_to_text(s: int):
     return ':'.join((h,m,s))
 
 
-def update_patient_cache(request, get_all: bool =False):
+def update_patient_cache(request, get_all: bool =False, doctor:int =None, office:int =None):
     ''' cache priming setup; as the application runs, the WAMP module
         ought to append/update/delete single items as they occur
     '''
     access_token = UserSocialAuth.objects.get().extra_data['access_token']
     headers      = {'Authorization': 'Bearer %s' % access_token,}
-    doctor       = request.session['doctor']
-    office       = request.session['office']
+
+    if not (doctor and office):
+        doctor       = request.session['doctor']
+        office       = request.session['office']
 
     # sync patients based on those that have an appointment at the specified office for the
     # specified doctor, then sync appointments
@@ -293,7 +295,7 @@ def create_appointment(request, patient, scheduled_time, duration: int =None, re
 def find_avail_timeslots(schedule, skip=None):
     # normally "now" will be calculated
     #now = datetime.datetime.now(pytz.utc)
-    now = datetime.datetime.now(pytz.utc).replace(hour=12, minute=27)
+    now = datetime.datetime.now(pytz.utc).replace(hour=13, minute=27) # 8.27am
 
     min_duration = datetime.timedelta(minutes=30)
     max_start_time = now.replace(hour=16, minute=0, second=0, microsecond=0)
@@ -302,6 +304,13 @@ def find_avail_timeslots(schedule, skip=None):
     if skip:
         schedule += skip
         schedule.sort()
+
+    if len(schedule) >0:
+        print(schedule)
+        if max_start_time > schedule[-1][0]+datetime.timedelta(minutes=schedule[-1][1]):
+            schedule.append((max_start_time, 0)) # place a stop marker to search before
+    else:
+        schedule.append((max_start_time, 0))
 
     avail = []
 
