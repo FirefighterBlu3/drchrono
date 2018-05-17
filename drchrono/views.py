@@ -89,11 +89,13 @@ def webhook(request):
     for k,v in ds.items():
         print('ds> {:>30}: {}'.format(k,v))
 
+    # done
     if event.startswith('APPOINTMENT_'):
         update_appointment_cache(request, doctor=ds['owning_doctor_id'],
                                           office=ds['office'],
                                           get_specific=ds['id'])
 
+    # not receiving PATIENT webhooks from the API...
     elif event.startswith('PATIENT_'):
         update_patient_cache(request, doctor=ds['owning_doctor_id'],
                                       office=ds['office'],
@@ -635,6 +637,8 @@ def ajax_checkin_complete(request):
         print('appointment id is: {}'.format(id))
         a = Appointment.objects.get(id=id)
 
+    # the Project email indicates we should set this to "Arrived", but
+    # Checked In does seem quite a bit more appropriate
     a.status = 'Checked In'
     a.arrived_time = datetime.datetime.now(pytz.utc)
     a.save()
