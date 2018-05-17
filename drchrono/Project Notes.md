@@ -1,3 +1,26 @@
+Purpose
+
+This is an interview project to understand how I, the candidate, approach problem solving, how I utilize the Python language, and my software writing characteristics. If you're browsing this as an effort to produce your own drchrono hackathon task, please be mindful that my work is NOT representative of your work and should you be hired off my work, unless we are similar people, it'll probably show. That said, you can see how I did things, but use it as a suggestion as you develop your own. Don't copy and paste. Also, I'm utterly brand new to Django so I probably did a few things ... wrong. ;-]
+
+My implementation of this project is considerably more detailed than is likely to be produced as I had certain circumstances that deviated dramatically from the norm.
+
+Base requirements of the task are:
+* account association flow where doctor can authenticate using their drchrono account
+  * then set up the kiosk for their office
+* after the doctor is logged in, a page should be displayed that lets patients check in
+* a patient with an appointment should first confirm their identity (first/last name maybe SSN) then
+  * be able to update their demographic information using the patient chart API endpoint
+  * once the they have filled out that information the app can set the appointment status to "Arrived"
+
+* the doctor should also have their own page they can leave open that displays today’s appointments
+  * indicating which patients have checked in (status updated in API)
+  * how long they have been waiting
+  * doctor can indicate they are seeing a patient
+    * which stops the “time spent waiting” clock
+  * the doctor should also see the overall average wait time for all patients they have ever seen
+
+
+
 Technologies
 
 * Nginx with letsencrypt SSL certificates
@@ -67,18 +90,20 @@ Goals and TODO
 * allow doctor to set local timezone
 * put a HOME button on kiosk path that takes user back to patient check-in
 * put HOME button on dr path that takes user back to ...
-* employ webhooks with the API so cache updates can happen in the background instead of a view load (view created, cache updates happen, needs wamp for appointment redraw)
+* employ webhooks with the API so cache updates can happen asynchronously (needs wamp for appointment page redraw)
   * trigger a reload at midnight by our server (probably use Celery)
 * build a WAMP router and component so web page data can be updated real-time without page reloads (initial build created)
 * need aesthetic continuity in check-in page
-  * unselect other appointment time boxes before selecting current one
 * make doctor appt page date selectable and selectable width (1day, 1wk..)
-* patient check-in ought to toast a message that the person has been [un]successfully checked in
+* patient check-in ought to toast a message that the person has been [un]successfully checked in (ajax xhr happens as demographics are ajax fetched)
 * new patients are not created, only existing patients are allowed
 * new patients should have a [confirm?] button pop up next to their name/dob if they type in a name/dob that isn't in our database, we don't want to store typoed names
 * demographics DoB doesn't have placeholder text because it's a widget[date] that doesn't support the placeholder attribute (read-only, still ought to have it simulated if there's no value)
 * choosing a walk-in time could be iterative instead of making one big block
 * choosing a walk-in time could round up
+* walk-in slots ought to be fully populated
+* mock tests, currently there's zilch
+* some view functions have gotten a bit fat and ought to be rewritten using a sub-function or two to clearly confine operations
 
 
 
@@ -87,9 +112,18 @@ Bugs
 * hardwired office appointment start time, no profile used
 * hardwired min-office visit block is 30 minutes
 * not all input is sanitized
-* not all GET/POST request methods are properly checked
 * a new page load for patient check-in does not consider if the patient has already checked in and will restart the wait-time and appointment status
 * errors that redirect to the check-in page ought to fade away so the next patient doesn't see them
 * clicking 'back' in the browser to the check-in page may result in an 'invalid date' indication due to HTML5 date widget not recovering all its state
 * avg wait time for today (breaks/negative value) if you leave the timer running all day or if you check in on a different day
 * appointment creation doesn't gracefully handle overlap or duplication
+* on tablets, the date widget doesn't handly my CSS cleanly
+
+
+
+API notes
+* Patient Modification webhooks aren't being performed although requested
+* Appointment creation endpoint would help a lot if it returned the new appointment ID in the response (does this apply to any endpoint that creates objects?)
+
+
+What I would really love to do, is write a large set of single method sample implementations for each endpoint of the API that show exactly how something should be used
