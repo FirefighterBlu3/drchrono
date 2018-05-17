@@ -216,8 +216,12 @@ def update_appointment_cache(request, get_all:bool =False, get_specific:int =Non
         url += '/{}'.format(get_specific)
 
 
-    appointments = json_get(url, params=data, headers=headers)
-    appointments = sorted(appointments, key=itemgetter('scheduled_time'))
+    try:
+        appointments = json_get(url, params=data, headers=headers)
+        appointments = sorted(appointments, key=itemgetter('scheduled_time'))
+    except:
+        print('Aborting; Failed to fetch appt for {}'.format(url))
+        return
 
     print('Updating cache for {} appointments'.format(len(appointments)))
     for i, appt in enumerate(appointments):
