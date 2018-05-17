@@ -97,14 +97,14 @@ Goals and TODO
 * make doctor appt page date selectable and selectable width (1day, 1wk..)
 * patient check-in ought to toast a message that the person has been [un]successfully checked in (ajax xhr happens as demographics are ajax fetched)
 * new patients are not created, only existing patients are allowed
-* new patients should have a [confirm?] button pop up next to their name/dob if they type in a name/dob that isn't in our database, we don't want to store typoed names
+* new patients should have a [confirm?] button pop up next to their name/dob if they type in a name/dob that isn't in our database, we don't want to store typoed names (new patients not yet supported)
 * demographics DoB doesn't have placeholder text because it's a widget[date] that doesn't support the placeholder attribute (read-only, still ought to have it simulated if there's no value)
 * choosing a walk-in time could be iterative instead of making one big block
 * choosing a walk-in time could round up
 * walk-in slots ought to be fully populated
 * mock tests, currently there's zilch
 * some view functions have gotten a bit fat and ought to be rewritten using a sub-function or two to clearly confine operations
-
+* perhaps show patient photo in the demographics or check-in sections?
 
 
 Bugs
@@ -118,6 +118,7 @@ Bugs
 * avg wait time for today (breaks/negative value) if you leave the timer running all day or if you check in on a different day
 * appointment creation doesn't gracefully handle overlap or duplication
 * on tablets, the date widget doesn't handly my CSS cleanly
+* a number of API interactions don't respond cleanly if the appt/pt is deleted external to the app (webhooks don't always arrive to update me, actually, no DELETE have arrived, ever)
 
 
 
