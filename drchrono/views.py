@@ -608,7 +608,10 @@ def ajax_checkin_complete(request):
         # our webhook giving us the new appointment ASAP. the API
         # does not give us an ID in the response when we create a
         # new appointment. there are a few complex work-arounds
-        # that we can do that rely on a chain of events
+        # that we can do that rely on a chain of events, but right
+        # now, it's just a 5 second delay :-(
+
+        # an unfound patient/appt isn't handled
 
         print('finding their walk-in appointment')
         # try and locate
