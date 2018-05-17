@@ -266,14 +266,30 @@ def update_appointment_cache(request, get_all:bool =False, get_specific:int =Non
 
 
 @check_refresh_token
-def patch_appointment(request, appointment_id: int, patchdata):
+def patch_patient(request, patient_id:int, patchdata):
+    access_token = UserSocialAuth.objects.get().extra_data['access_token']
+    headers      = {'Authorization': 'Bearer %s' % access_token,}
+    doctor       = request.session['doctor']
+    office       = request.session['office']
+
+    url = api+'/patients/{}'.format(patient_id)
+    print('patching API for patient: {}, to {}'.format(url, patchdata))
+
+    response = requests.patch(url, data=patchdata, headers=headers)
+    response.raise_for_status()
+
+    print(response)
+
+
+@check_refresh_token
+def patch_appointment(request, appointment_id:int, patchdata):
     access_token = UserSocialAuth.objects.get().extra_data['access_token']
     headers      = {'Authorization': 'Bearer %s' % access_token,}
     doctor       = request.session['doctor']
     office       = request.session['office']
 
     url = api+'/appointments/{}'.format(appointment_id)
-    print('patching API: {}, to {}'.format(url, patchdata))
+    print('patching API for appointment: {}, to {}'.format(url, patchdata))
 
     response = requests.patch(url, data=patchdata, headers=headers)
     response.raise_for_status()
