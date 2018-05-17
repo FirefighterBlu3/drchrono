@@ -84,11 +84,11 @@ class PatientAppointmentForm(forms.Form):
     def clean_date_of_birth(self):
         obj = self.cleaned_data.get('date_of_birth')
         if not obj:
-            self.add_error(field='date_of_birth', error='invalid Date of Birth')
+            self.add_error(field='date_of_birth', error='invalid Date of Birth, null')
         if not isinstance(obj, datetime.date):
-            self.add_error(field='date_of_birth', error='invalid Date of Birth')
+            self.add_error(field='date_of_birth', error='invalid Date of Birth, not datetime')
         if not self.patient_dob == obj:
-            self.add_error(field='date_of_birth', error='invalid Date of Birth')
+            self.add_error(field='date_of_birth', error='invalid Date of Birth, <> PT')
 
         return obj
 
