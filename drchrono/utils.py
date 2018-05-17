@@ -57,20 +57,26 @@ def check_refresh_token(f):
 
 
 @check_refresh_token
-def json_get(url: str, params=None, headers=None):
+def json_get(url:str, params=None, headers=None):
     data=[]
     while url:
         print('retrieving: {} params: {}'.format(url, params))
         response = requests.get(url, params=params, headers=headers)
         response.raise_for_status()
         d = response.json()
-        data += d['results']
-        url = d['next']
+
+        if 'results' in d:
+            data += d['results']
+            url = d['next']
+        else:
+            # we fetched a single item by id, so build a one-item list
+            data = [d,]
+            break
 
     return data
 
 
-def ISO_639(key: str):
+def ISO_639(key:str):
     if key in (None, '', 'blank'):
         key='eng'
 
@@ -93,14 +99,14 @@ def model_to_dict(instance):
     return data
 
 
-def seconds_to_text(s: int):
+def seconds_to_text(s:int):
     h = str(int(s/60/60%24))
     m = str(int(s/60%60))
     s = str(int(s%60))
     return ':'.join((h,m,s))
 
 
-def update_patient_cache(request, get_all: bool =False, doctor:int =None, office:int =None):
+def update_patient_cache(request, get_all:bool =False, doctor:int =None, office:int =None, patient:int =None):
     ''' cache priming setup; as the application runs, the WAMP module
         ought to append/update/delete single items as they occur
     '''
@@ -169,25 +175,35 @@ def update_patient_cache(request, get_all: bool =False, doctor:int =None, office
                 o.delete()
 
 
-def update_appointment_cache(request, get_all: bool =False, get_specific: bool =False):
+def update_appointment_cache(request, get_all:bool =False, get_specific:int =None, doctor:int =None, office:int =None):
     ''' cache priming setup; as the application runs, the WAMP module
         ought to append/update/delete single items as they occur
     '''
     access_token = UserSocialAuth.objects.get().extra_data['access_token']
     headers      = {'Authorization': 'Bearer %s' % access_token,}
-    doctor       = request.session['doctor']
-    office       = request.session['office']
+
+    if not (doctor and office):
+        doctor       = request.session['doctor']
+        office       = request.session['office']
 
     # when making a GET request to /api/appointments either the
     #   since, date, or date_range query parameter must be specified
     # note; this is based on the principal doctor of the facility, other
     # doctors may be operating underneath him/her
     now = datetime.datetime.now(pytz.utc).astimezone(pytz.timezone('US/Eastern'))
-    print('Fetching appointment schedule for: {}'.format(now))
+
+    if get_specific:
+        print('Fetching just one appointment: {}'.format(get_specific))
+    elif not get_all:
+        print('Fetching appointment schedule for: {}'.format(now))
+    else:
+        print('Fetching all appointments')
+
+    url = api+'/appointments'
 
     data = {
-        'doctor': request.session['doctor'],
-        'office': request.session['office'],
+        'doctor': doctor,
+        'office': office,
         'date'  : now.strftime('%F'),
     }
 
@@ -195,13 +211,15 @@ def update_appointment_cache(request, get_all: bool =False, get_specific: bool =
         del data['office']
         del data['date']
         data['since'] = '1970-01-01'
+    elif get_specific:
+        del data['date']
+        url += '/{}'.format(get_specific)
 
-    print('Fetching all appointments')
-    appointments = json_get(api+'/appointments', params=data, headers=headers)
 
+    appointments = json_get(url, params=data, headers=headers)
     appointments = sorted(appointments, key=itemgetter('scheduled_time'))
 
-    print('Priming cache for {} appointments'.format(len(appointments)))
+    print('Updating cache for {} appointments'.format(len(appointments)))
     for i, appt in enumerate(appointments):
         if not i % 10:
             print('  {}'.format(i))
@@ -227,13 +245,15 @@ def update_appointment_cache(request, get_all: bool =False, get_specific: bool =
             a.scheduled_time          = pytz.timezone('US/Eastern').localize(dateparse(appt['scheduled_time']))
             a.patient                 = p
             a.duration                = appt['duration']
-            a.reason                  = re.sub('^#\w+\s*', '', appt['reason'])
+            a.reason                  = re.sub(r'^#\w+\s*', '', appt['reason'])
             a.status                  = appt['status'] or ''
             a.exam_room               = appt['exam_room']
             a.preferred_language_full = ISO_639(p.preferred_language)
             a.save()
-            #print('Appointment cache updated: {}/{} {}'.format(
-            #    a.scheduled_time.strftime('%F %T'),p,p.date_of_birth))
+
+            if get_specific or not get_all:
+                print('Appointment cache updated: {} {}/{} {}'.format(
+                    a.id, a.scheduled_time.strftime('%F %T'),p,p.date_of_birth))
 
     if get_all:
         print('Primed {} appointments'.format(len(appointments)))
@@ -287,18 +307,39 @@ def create_appointment(request, patient, scheduled_time, duration: int =None, re
     }
 
     print('patching API: {}, to {}'.format(url, patchdata))
-    response = requests.post(url, data=patchdata, headers=headers)
-    response.raise_for_status()
-    print(response.body)
+    try:
+        response = requests.post(url, data=patchdata, headers=headers)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        # most likely a duplicate, add exact test TODO
+        print('conflict? {}'.format(e))
+        # delete and re-create appt, but we need the appt ID
+        #response = requests.delete(url+'/{}'.format(appointment_id), data=patchdata, headers=headers)
+        #response.raise_for_status()
+        #response = requests.post(url, data=patchdata, headers=headers)
+        #response.raise_for_status()
+
+    try:
+        print('create appt response body: {}'.format(response.body))
+    except:
+        pass
 
 
 def find_avail_timeslots(schedule, skip=None):
-    # normally "now" will be calculated
-    #now = datetime.datetime.now(pytz.utc)
-    now = datetime.datetime.now(pytz.utc).replace(hour=13, minute=27) # 8.27am
+    ''' generate the next 1-2 available time slots for a walk-in.
+        this doesn't really work as i want, i'd like to return all
+        available time slots
+    '''
+    # normally "now" will really be now()
+
+    now = pytz.timezone('US/Eastern').localize(
+            datetime.datetime.now()
+            ).replace(hour=8, minute=27) # 8.27am
+
+    print('find walkin time for {}'.format(now))
 
     min_duration = datetime.timedelta(minutes=30)
-    max_start_time = now.replace(hour=16, minute=0, second=0, microsecond=0)
+    max_start_time = now.replace(hour=16, minute=30, second=0, microsecond=0)
 
     # lunch hour etc
     if skip:
@@ -314,6 +355,7 @@ def find_avail_timeslots(schedule, skip=None):
 
     avail = []
 
+    # analyze the existing schedule
     for i, (s, d) in enumerate(schedule):
         # check if 'now' is before the current timeslot
         if now < s and (s-now) > min_duration:
@@ -335,5 +377,9 @@ def find_avail_timeslots(schedule, skip=None):
             avail_d = min_duration
 
             avail.append((avail_t, int(avail_d.total_seconds()/60) ))
+
+    # now do 30 minute slots from the last scheduled appt to the end of the
+    # office day
+    # TODO
 
     return avail
