@@ -313,11 +313,10 @@ def create_appointment(request, patient, scheduled_time, duration: int =None, re
     except requests.exceptions.HTTPError as e:
         # most likely a duplicate, add exact test TODO
         print('conflict? {}'.format(e))
-        # delete and re-create appt, but we need the appt ID
-        #response = requests.delete(url+'/{}'.format(appointment_id), data=patchdata, headers=headers)
-        #response.raise_for_status()
-        #response = requests.post(url, data=patchdata, headers=headers)
-        #response.raise_for_status()
+        # delete and re-create appt, but we need the appt ID. we can't
+        # handle this yet. we'll probably need to carefully generate a
+        # single ID lookup to figure out what appt we're conflicting with
+        # then determine what to do
 
     try:
         print('create appt response body: {}'.format(response.body))
