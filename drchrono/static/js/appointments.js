@@ -2,9 +2,10 @@
 
 $(document).ready(function() {
 
-    $('h2')
-        .first()
-        .css({color:'green'});
+    $('.glyphicon-refresh').on('click', function(){
+        // ignore results, just trigger the view
+        $.get('/doctor/appointments/refresh');
+    });
 
     /*
      * take an integer number and return a H:M:S type notation
