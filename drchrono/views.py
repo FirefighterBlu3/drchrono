@@ -15,6 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from social_django.models import UserSocialAuth
 
 #Project
+from drchrono.settings import SOCIAL_AUTH_DRCHRONO_KEY, SOCIAL_AUTH_DRCHRONO_SECRET
 from .models import Office, Doctor, Patient, Appointment
 from .forms import KioskSetupForm, PatientAppointmentForm, DemographicForm
 from .utils import fstamp, check_refresh_token, json_get, ISO_639, model_to_dict
@@ -31,17 +32,9 @@ import re
 import traceback
 
 from dateutil.parser import parse as dateparse
-
-from drchrono.settings import SOCIAL_AUTH_DRCHRONO_KEY, SOCIAL_AUTH_DRCHRONO_SECRET
+from operator import itemgetter
 
 api='https://drchrono.com/api'
-
-# our webhook view needs some way to know who the current doc/office is.
-# unfortunately the webhook doesn't share session data with the kios. as
-# we may have more than one doctor stored in the DB, for now let's rely
-# on the KISS global variable
-doctor=None
-office=None
 
 # todo: split this into kiosk/views.py and doctor/views.py ...
 
@@ -71,7 +64,7 @@ def webhook(request):
         print('unrecognized sender, dropping')
         return HttpResponse("i don't know you", status=401)
 
-    event: str = request.META.get('HTTP_X_DRCHRONO_EVENT')
+    event:str = request.META.get('HTTP_X_DRCHRONO_EVENT')
     data = json.loads(request.body)
     print('Received webhook for: {}'.format(event))
 
@@ -80,12 +73,35 @@ def webhook(request):
         for k,v in data[obj].items():
             print('    {:>30}: {}'.format(k,v))
 
+    ds = {'owning_doctor_id':None, 'office':None, 'patient':None}
+    for mk, k in (('receiver','owning_doctor_id'),
+                  ('object','office'),
+                  ('object','patient'),
+                  ('object','id')):
+        try:
+            ds[k] = data[mk].get(k, -1)
+        except:
+            pass
+
+    # TODO, make these item specific granularity, no need to refetch
+    # the entire collection
+    for k,v in ds.items():
+        print('ds> {:>30}: {}'.format(k,v))
+
     if event.startswith('APPOINTMENT_'):
-        update_appointment_cache(request, doctor, office)
+        update_appointment_cache(request, doctor=ds['owning_doctor_id'],
+                                          office=ds['office'],
+                                          get_specific=ds['id'])
+
     elif event.startswith('PATIENT_'):
-        update_patient_cache(request, doctor, office)
+        update_patient_cache(request, doctor=ds['owning_doctor_id'],
+                                      office=ds['office'],
+                                      patient=ds['patient'])
+
     elif event.startswith('VACCINE_'):
-        update_patient_cache(request, doctor, office)
+        update_patient_cache(request, doctor=ds['owning_doctor_id'],
+                                      office=ds['office'],
+                                      patient=ds['patient'])
 
     return JsonResponse({'hi':'tyty'})
 
@@ -113,20 +129,18 @@ def kiosk_path(request):
         TODO: put the cache priming behind WAMP for asynchronous updates that
         don't block the startup
     '''
-    global doctor, office
-
 
     if not request.method == 'POST':
         raise SuspiciousOperation
 
-    request.session['office']: int = int(request.POST['office'], 10)
+    request.session['office']:int = int(request.POST['office'], 10)
 
     doctor = request.session['doctor']
     office = request.session['office']
 
-    update_patient_cache(request, get_all=True)
-    update_appointment_cache(request, get_all=True)
-    path: str = request.POST['path']
+    update_patient_cache(request, get_all=True, doctor=doctor, office=office)
+    update_appointment_cache(request, get_all=True, doctor=doctor, office=office)
+    path:str = request.POST['path']
 
     if not path in ('drchrono_home', 'kiosk_home'):
         return HttpResponseRedirect(reverse('home'))
@@ -191,6 +205,20 @@ def drchrono_appointments(request):
 
 
 @fstamp
+def drchrono_appointments_refresh(request):
+    ''' let the doctor manually refresh the cached appointments and patients
+    '''
+
+    doctor = request.session['doctor']
+    office = request.session['office']
+
+    update_patient_cache(request, get_all=True, doctor=doctor, office=office)
+    update_appointment_cache(request, get_all=True, doctor=doctor, office=office)
+
+    return JsonResponse({'hi':'tyty'})
+
+
+@fstamp
 def kiosk_home(request):
     '''Doctor can pick to view appointment list or patient check in
     '''
@@ -223,10 +251,10 @@ def kiosk_demographics(request):
         raise SuspiciousOperation
 
     print(request.POST)
-    first_name: str = request.POST.get('first_name')
-    last_name: str = request.POST.get('last_name')
-    appt: str = request.POST.get('appointment-selection')
-    dob: str  = request.POST['date_of_birth']
+    first_name:str = request.POST.get('first_name')
+    last_name:str  = request.POST.get('last_name')
+    appt:str = request.POST.get('appointment-selection')
+    dob:str  = request.POST['date_of_birth']
     dob  = dateparse(dob).strftime('%F')
 
     query = Q(first_name__exact=first_name)
@@ -286,7 +314,7 @@ def kiosk_checked_in(request):
     if form.is_valid():
         form.save()
 
-    doctor: int = request.session['doctor']
+    doctor:int = request.session['doctor']
     return render(request, 'kiosk/checked_in.html', {'doctor': Doctor.objects.get(id=doctor)})
 
 
@@ -299,7 +327,7 @@ def ajax_see_patient(request):
         raise SuspiciousOperation
 
     id          = request.POST.get('id')
-    status: str = request.POST.get('status')
+    status:str  = request.POST.get('status')
 
     appt   = Appointment.objects.get(id=id)
 
@@ -355,13 +383,14 @@ def ajax_checkin_autocomplete(request):
 
 @fstamp
 def ajax_checkin_appointments(request):
-    ''' Intent is to provide a list of times if there is more than one appointment
+    ''' Intent is to provide a list of appointment times
         for this patient
     '''
 
     if not request.method == 'GET':
         raise SuspiciousOperation
 
+    forever = pytz.timezone('UTC').localize(datetime.datetime(2038, 12, 31))
     now = datetime.datetime.now(pytz.utc) \
                            .astimezone(pytz.timezone('US/Eastern')) \
                            .replace(hour=0, minute=0, second=0, microsecond=0)
@@ -381,7 +410,7 @@ def ajax_checkin_appointments(request):
         patient = queryset.get(search_name__iexact=name, date_of_birth=dob)
     except Patient.DoesNotExist:
         # probably a walk-in
-        results = [[-1,"I want a walk-in appointment"]]
+        results = [[-1,forever,"I want a walk-in appointment"]]
 
         response_prose='{}({{result:{}}})'.format(callback, list(results))
         return HttpResponse(response_prose, "text/javascript")
@@ -396,13 +425,13 @@ def ajax_checkin_appointments(request):
 
     except Appointment.DoesNotExist:
         # probably a walk-in
-        results = [[-1,"I want a walk-in appointment"]]
+        results = [[-1,forever,"I want a walk-in appointment"]]
 
         response_prose='{}({{result:{}}})'.format(callback, list(results))
         return HttpResponse(response_prose, "text/javascript")
 
     # build as a list of tuples first...
-    results = [(o.id,o.scheduled_time
+    results = [(o.id,o.scheduled_time,o.scheduled_time
                 .astimezone(pytz.timezone('US/Eastern'))
                 .strftime('%l:%M%P')
                 .strip()) for o in data]
@@ -411,11 +440,12 @@ def ajax_checkin_appointments(request):
     results = list(set(results))
 
     # and add the walk-in...
-    results += [(-1, "I want a walk-in appointment")]
+    results += [(-1,forever, "I want a walk-in appointment")]
 
-    # then make it a list of lists because javascript has no notion of tuples and
-    # we're building the json by hand
-    results = [[a,b] for a,b in results]
+    # then make it a list of lists because javascript has no notion of
+    # tuples and we're building the json by hand
+    results = sorted(results, key=itemgetter(1))
+    results = [[a,c] for a,b,c in results]
 
     response_prose='{}({{result:{}}})'.format(callback, list(results))
     return HttpResponse(response_prose, "text/javascript")
@@ -466,11 +496,16 @@ def ajax_checkin_appointment_create(request):
     name = request.POST.get('name').lower()
     appt = request.POST.get('appointment_time')
     dob  = request.POST.get('dob')
+    now  = datetime.datetime.now(pytz.utc) \
+                            .astimezone(pytz.timezone('US/Eastern')) \
+                            .replace(hour=0, minute=0, second=0, microsecond=0)
 
     # verify the patient exists in our DB
     try:
         dob = dateparse(dob).strftime('%F')
-        appt_time = pytz.timezone('US/Eastern').localize( dateparse(appt.split()[0]) )
+
+        appt_time = dateparse(appt.split()[0])
+        appt_time = now.replace(hour=appt_time.hour, minute=appt_time.minute)
         print('appt time: {}'.format(appt_time))
 
     except:
