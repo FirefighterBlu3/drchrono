@@ -63,7 +63,7 @@ $(document).ready(function() {
         });
     }
 
-    function check_in_patient(name, dob, appointment_id) {
+    function check_in_patient(name, dob, appointment_id, appointment_time) {
         var aj, csrf;
 
         csrf = $('input[name=csrfmiddlewaretoken]').val();
@@ -73,7 +73,8 @@ $(document).ready(function() {
             data: {
                 name: name,
                 dob:  dob,
-                appointment_id: appointment_id,
+                appointment_id:   appointment_id,
+                appointment_time: appointment_time,
                 csrfmiddlewaretoken: csrf,
             },
 
@@ -352,25 +353,32 @@ $(document).ready(function() {
         // walk-in appt selected, see if we can get patient demographics,
         // then create a new appointment and check in the patient (done on
         // creation success)
-        var name, dob;
+        var name, dob, appointment_time;
 
         name = findsmashed('name');
         name = $('input[name='+name+']').val();
         dob  = $('div.pre-checkin input[type=date]').attr('data-date');
+        appointment_time = $(this).text();
 
         console.log(name,dob);
 
-        create_appointment(name, dob, $(this).text())
+        create_appointment(name, dob, appointment_time)
             .done(function (data) {
                 console.log(data);
-                // check_in_patient(name, dob, appointment_id)
-                //     .done(function (){
-                //             $('div.demographics')
-                //                 .find('input')
-                //                 .val('');
+                if (data['status'] === 'tyty') {
+                    // this will break, we don't know what the appt ID is yet,
+                    // the API doesn't give us an ID when it's created
+                    setTimeout(function() {
+                        check_in_patient(name, dob, -1, appointment_time)
+                            .done(function (){
+                                $('div.demographics')
+                                    .find('input')
+                                    .val('');
 
-                //             fetch_demographics(name, dob);
-                //     });
+                                fetch_demographics(name, dob);
+                            });
+                    }, 5000);
+                }
             });
 
     });
