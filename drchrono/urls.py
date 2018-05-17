@@ -27,6 +27,7 @@ urlpatterns = [
     url(r'^doctor/login/$',        views.drchrono_login,        name='drchrono_login'),
     url(r'^doctor/logout/$',       views.drchrono_logout,       name='drchrono_logout'),
     url(r'^doctor/appointments/$', views.drchrono_appointments, name='drchrono_appointments'),
+    url(r'^doctor/appointments/refresh$', views.drchrono_appointments_refresh, name='drchrono_appointments_refresh'),
     url(r'^kiosk/home/$',          views.kiosk_home,            name='kiosk_home'),
     url(r'^kiosk/check_in/$',      views.kiosk_check_in,        name='kiosk_check_in'),
     url(r'^kiosk/checked_in/$',    views.kiosk_checked_in,      name='kiosk_checked_in'),
