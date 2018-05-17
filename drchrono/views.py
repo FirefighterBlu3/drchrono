@@ -533,11 +533,15 @@ def ajax_checkin_appointment_create(request):
 @fstamp
 def ajax_checkin_complete(request):
     ''' Patient correctly identified self and selected their
-        appointment time
+        appointment time. mark them checked in with the API
     '''
 
     if not request.method == 'POST':
         raise SuspiciousOperation
+
+    now = datetime.datetime.now(pytz.utc) \
+                           .astimezone(pytz.timezone('US/Eastern')) \
+                           .replace(hour=0, minute=0, second=0, microsecond=0)
 
     print(request.POST)
     name = request.POST.get('name').lower()
@@ -555,24 +559,55 @@ def ajax_checkin_complete(request):
         raise SuspiciousOperation(form.errors)
 
 
-    if appt == 'Walk-in':
-        print('creating a new appointment')
-        # check the schedule, find the next available slot
+    if appt == -1:
+        appt_time = request.POST.get('appointment_time')
+        appt_time = dateparse(appt_time.split()[0])
+        appt_time = now.replace(hour=appt_time.hour, minute=appt_time.minute)
+        print('appointment_time is {}'.format(appt_time))
+
+        # note, this is currently a race-condition and relies on
+        # our webhook giving us the new appointment ASAP. the API
+        # does not give us an ID in the response when we create a
+        # new appointment. there are a few complex work-arounds
+        # that we can do that rely on a chain of events
+
+        print('finding their walk-in appointment')
+        # try and locate
+        q = Patient.objects.annotate(
+                full_name=Concat(
+                    'first_name',
+                    Value(' '),
+                    'last_name',
+                    output_field=CharField()
+                )
+            ).filter(Q(date_of_birth=dob) &
+                     Q(full_name__icontains=name)
+            ).order_by('first_name')
+
+        try:
+            patient = q.get()
+        except Patient.DoesNotExist:
+            print('not so good, this should be a confirmed patient')
+        except Patient.MultipleObjectsReturned:
+            print('not so good, this should be only one patient')
+        else:
+            a = Appointment.objects.filter(scheduled_time=appt_time).get()
 
     else:
         id = form.cleaned_data.get('id')
         print('appointment id is: {}'.format(id))
         a = Appointment.objects.get(id=id)
-        a.status = 'Checked In'
-        a.arrived_time = datetime.datetime.now(pytz.utc)
-        a.save()
 
-        request.session['drchrono_patient_checked_in']=a.patient.id
+    a.status = 'Checked In'
+    a.arrived_time = datetime.datetime.now(pytz.utc)
+    a.save()
 
-        for k,v in a:
-            print('  {:>30}: {!r}'.format(k,v))
+    request.session['drchrono_patient_checked_in']=a.patient.id
 
-        patch_appointment(request, a.id, {'status':a.status})
+    for k,v in a:
+        print('  {:>30}: {!r}'.format(k,v))
+
+    patch_appointment(request, a.id, {'status':a.status})
 
     return JsonResponse({'hi':'tyty'})
 
