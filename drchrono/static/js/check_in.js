@@ -52,6 +52,9 @@ $(document).ready(function() {
                         .slideDown();
 
                     $('div.demographics')
+                        .find('input')
+                        .val('')
+                        .closest('div.demographics')
                         .slideDown();
                 }
             },
@@ -384,7 +387,7 @@ $(document).ready(function() {
     });
 
     $('form.check-in').on('click', 'button[name=demographics-complete]', function() {
-        //$('form.check-in').submit();
+        $('form.check-in').submit();
     });
 
 });
