@@ -19,8 +19,9 @@ from drchrono.settings import SOCIAL_AUTH_DRCHRONO_KEY, SOCIAL_AUTH_DRCHRONO_SEC
 from .models import Office, Doctor, Patient, Appointment
 from .forms import KioskSetupForm, PatientAppointmentForm, DemographicForm
 from .utils import fstamp, check_refresh_token, json_get, ISO_639, model_to_dict
-from .utils import update_appointment_cache, patch_appointment, seconds_to_text
-from .utils import find_avail_timeslots, create_appointment, update_patient_cache
+from .utils import update_appointment_cache, patch_patient, patch_appointment
+from .utils import seconds_to_text, find_avail_timeslots
+from .utils import create_appointment, update_patient_cache
 
 #Python
 import datetime
@@ -261,6 +262,8 @@ def kiosk_demographics(request):
     query.add(Q(last_name__exact=last_name), Q.AND)
     query.add(Q(date_of_birth=dob), Q.AND)
 
+    patchdata = {}
+
     try:
         patient = Patient.objects.get(query)
 
@@ -292,11 +295,44 @@ def kiosk_demographics(request):
                 date_of_birth=dob
             )
 
+        patchdata={'last_name':l, 'first_name':f, 'date_of_birth':dob,}
 
-    #patch_patient(request, a.id, {'status':a.status})
+    # populate the remainder of patch data
+    #
+    # WARNING!!! this data needs to be sanitized by doing a
+    # forms.DemographicsForm() first!
+    #
 
-    form = DemographicForm(instance=patient)
-    return render(request, 'kiosk/checked_in.html', {'form':form})
+    form = DemographicForm(request.POST)
+    if not form.is_valid():
+        print('form complaint :-]')
+
+    else:
+        pt_d = model_to_dict(patient)
+        for k,v in pt_d.items():
+
+            # only a supervised change allowed
+            if k in ('id','last_name','first_name','date_of_birth'):
+                continue
+
+            rp_v = request.POST.get(k)
+
+            if rp_v in ('blank',None):
+                continue;
+
+            if rp_v == '' and v == 'blank':
+                continue;
+
+            if rp_v != v:
+                print('UPDATE: {}, {!r} <> {!r}'.format(k, v, rp_v))
+                patchdata[k] = rp_v
+
+    print(patchdata)
+
+    patch_patient(request, patient.id, patchdata)
+
+    doctor = request.session['doctor']
+    return render(request, 'kiosk/checked_in.html', {'doctor':Doctor.objects.get(id=doctor)})
 
 
 @fstamp
@@ -546,7 +582,8 @@ def ajax_checkin_complete(request):
     print(request.POST)
     name = request.POST.get('name').lower()
     appt = int(request.POST.get('appointment_id'), 10)
-    dob  = request.POST.get('dob')
+    dob:str = request.POST.get('dob')
+    dob  = dateparse(dob).strftime('%F')
 
     form = PatientAppointmentForm({
         'id':appt,
