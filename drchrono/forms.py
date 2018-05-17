@@ -45,6 +45,10 @@ class PatientAppointmentForm(forms.Form):
         if not isinstance(obj, int):
             self.add_error(field='id', error='invalid Appointment ID')
 
+        # special id for a walk-in appointment that is pending
+        if obj == -1:
+            return obj
+
         try:
             q = Appointment.objects.get(id=obj)
         except:
