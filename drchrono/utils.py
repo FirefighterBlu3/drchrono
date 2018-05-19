@@ -90,6 +90,20 @@ def ISO_639(key:str):
     return lang
 
 
+def ISO_639_reverse(key:str):
+    ''' ugly gross hack but this module doesn't support a better way.
+        we probably ought to plan on making a <select..> list of languages
+        that patients can use instead of a text box
+    '''
+    try:
+        key_long = [l.alpha_3 for l in list(pycountry.languages) if l.name.lower() == key.lower()][0]
+    except:
+        print('WARNING: Unable to lookup 639-2 for {}'.format(key))
+        key_long = ''
+
+    return key_long
+
+
 def model_to_dict(instance):
     data = {}
     for field in instance._meta.fields:
@@ -249,7 +263,7 @@ def update_appointment_cache(request, get_all:bool =False, get_specific:int =Non
             a.scheduled_time          = pytz.timezone('US/Eastern').localize(dateparse(appt['scheduled_time']))
             a.patient                 = p
             a.duration                = appt['duration']
-            a.reason                  = re.sub(r'^#\w+\s*', '', appt['reason'])
+            a.reason                  = re.sub(r'^#\w+\s*', '', appt['reason']) if appt['reason'] else ''
             a.status                  = appt['status'] or ''
             a.exam_room               = appt['exam_room']
             a.preferred_language_full = ISO_639(p.preferred_language)
