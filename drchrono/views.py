@@ -9,6 +9,8 @@ from django.contrib.auth import logout
 from django.contrib import messages
 from django.db.models import Q, Value, CharField
 from django.db.models.functions import Concat
+from django.dispatch import Signal, receiver
+from django.db.models.signals import post_save
 from django.views.generic import View
 from django.views.decorators.csrf import csrf_exempt
 
@@ -18,9 +20,9 @@ from social_django.models import UserSocialAuth
 from drchrono.settings import SOCIAL_AUTH_DRCHRONO_KEY, SOCIAL_AUTH_DRCHRONO_SECRET
 from .models import Office, Doctor, Patient, Appointment
 from .forms import KioskSetupForm, PatientAppointmentForm, DemographicForm
-from .utils import fstamp, check_refresh_token, json_get, ISO_639, model_to_dict
+from .utils import fstamp, check_refresh_token, json_get, ISO_639, ISO_639_reverse
 from .utils import update_appointment_cache, patch_patient, patch_appointment
-from .utils import seconds_to_text, find_avail_timeslots
+from .utils import seconds_to_text, find_avail_timeslots, model_to_dict
 from .utils import create_appointment, update_patient_cache
 
 #Python
@@ -31,6 +33,7 @@ import inspect
 import json
 import re
 import traceback
+import requests
 
 from dateutil.parser import parse as dateparse
 from operator import itemgetter
@@ -38,6 +41,137 @@ from operator import itemgetter
 api='https://drchrono.com/api'
 
 # todo: split this into kiosk/views.py and doctor/views.py ...
+
+
+#@receiver(post_save, sender=Appointment, dispatch_uid="webhook")
+@fstamp
+def notify_of_webhook(sender, **kwargs):
+    ''' whenever something about Appointments is changed, this
+        will be triggered. we'll post the change to our WAMP via
+        a REST bridge
+    '''
+    print('+++++++++++++++++ got webhook: {}'.format(kwargs))
+
+    model  = kwargs['hook_model'].lower()
+    action = kwargs['hook_action'].lower()
+    whdata = kwargs['data']['object']
+    topic  = 'org.blue_labs.drchrono.{}.{}'.format(model,action)
+
+    try: # delayed webhooks may try to act on deleted items
+        if model == 'appointment':
+            obj = Appointment.objects.get(id=whdata['id'])
+
+        elif model == 'patient':
+            obj = Patient.objects.get(id=whdata['id'])
+    except:
+        return
+
+    data = model_to_dict(obj)
+
+    for k in whdata:
+        data[k] = whdata[k]
+
+    # now overwrite model with webhook data
+    data['owning_doctor_id']       = kwargs['data']['receiver']['owning_doctor_id']
+    data['scheduled_time_epoch']   = ''
+    data['scheduled_time_display'] = ''
+    data['arrived_time_epoch']     = ''
+    data['arrived_time_display']   = ''
+
+
+    # masssage data into JSON serializable form as well as pre-build
+    # some fields here instead of in javascript
+    for k in data:
+        print('analyzing key: {}:  d/{}  wh/{}'.format(k,data[k],whdata[k] if k in whdata else '-'))
+        if k == 'patient':
+            if isinstance(data[k], int):
+                obj = Patient.objects.get(id=data[k])
+                patient = {'id': obj.id,
+                           'first_name': obj.first_name,
+                           'last_name': obj.last_name,
+                           'patient_photo': obj.patient_photo,
+                           'preferred_language_full': ISO_639(obj.preferred_language),
+                          }
+            else:
+                patient = {'id': data[k].id,
+                           'first_name': data[k].first_name,
+                           'last_name': data[k].last_name,
+                           'patient_photo': data[k].patient_photo,
+                           'preferred_language_full': ISO_639(data[k].preferred_language),
+                          }
+            data[k] = patient
+
+        elif k == 'scheduled_time':
+            st_utc = data[k]
+            if isinstance(data[k], datetime.datetime):
+                st_tz = st_utc.astimezone(pytz.timezone('US/Eastern'))
+            elif isinstance(data[k], str):
+                st_tz = dateparse(data[k])
+            data['scheduled_time_epoch']=st_tz.strftime('%s')
+            data['scheduled_time_display']=st_tz.strftime('%l:%M%P, ').lstrip()+ \
+                                           str(data['duration'])+'m'
+            if isinstance(data[k], datetime.datetime):
+                data[k] = data[k].isoformat()
+
+        elif k == 'arrived_time':
+            st_utc = data[k]
+            if isinstance(data[k], datetime.datetime):
+                st_tz = st_utc
+            elif isinstance(data[k], str):
+                st_tz = dateparse(data[k])
+            data['arrived_time_epoch']=st_tz.strftime('%s')
+            data['arrived_time_display']=st_tz.strftime('%l:%M%P').lstrip()
+            if isinstance(data[k], datetime.datetime):
+                data[k] = data[k].isoformat()
+
+        elif k == 'reason':
+            data[k] = re.sub(r'^#\w+\s*', '', data[k]) if data[k] else ''
+
+        elif isinstance(data[k], datetime.datetime):
+            data[k] = int(data[k].timestamp())
+        elif isinstance(data[k], datetime.date):
+            data[k] = data[k].isoformat()
+        elif data[k] is None:
+            data[k] = ''
+        elif data[k] is 'blank':
+            data[k] = ''
+
+    print('==> {}'.format({'topic':topic, 'args':[data]}))
+
+    if model == 'appointment':
+        r = requests.post("https://drc.blue-labs.org:7998/rest-bridge",
+                      json={
+                          'topic': topic,
+                          'args': [data]
+                      })
+
+    elif model == 'patient':
+        r = requests.post("https://drc.blue-labs.org:7998/rest-bridge",
+                      json={
+                          'topic': topic,
+                          'args': [data]
+                      })
+
+    # try:
+    #     d = model_to_dict(instance)
+    #     for k in d:
+    #         if isinstance(d[k], datetime.datetime):
+    #             d[k] = d[k].strftime('%FT%T%z')
+    #         if d[k] is None:
+    #             d[k] = 'NULL'
+
+    #     print('json d is {}'.format(d))
+    #     r = requests.post("https://drc.blue-labs.org:7998/rest-bridge-appointments",
+    #                   json={
+    #                       'topic': 'org.blue_labs.drchrono.appointments',
+    #                       'args': [d]
+    #                   })
+    #     print('gg gg gg gg')
+    # except:
+    #     print('error posting to bridge')
+
+webhook_s = Signal(providing_args=['hook_model','hook_action','data'])
+webhook_s.connect(notify_of_webhook)
 
 @csrf_exempt
 @fstamp
@@ -106,7 +240,13 @@ def webhook(request):
                                       office=ds['office'],
                                       patient=ds['patient'])
 
+    hook_action, hook_model = [s[::-1] for s in event[::-1].split('_',1)]
+    webhook_s.send(sender=None, hook_model=hook_model, hook_action=hook_action, data=data)
+
     return JsonResponse({'hi':'tyty'})
+
+
+
 
 
 @fstamp
@@ -189,7 +329,10 @@ def drchrono_appointments(request):
                            .replace(hour=0, minute=0, second=0, microsecond=0)
 
     waittimes = [(o.seen_time - o.arrived_time).total_seconds() for o in
-                      Appointment.objects.all() if o.scheduled_time and o.seen_time]
+                      Appointment.objects.all()
+                      if o.scheduled_time
+                      and o.seen_time
+                      and isinstance(o.arrived_time, datetime.datetime)]
 
     data = [model_to_dict(o) for o in Appointment.objects
                                                  .filter(scheduled_time__date=now)
@@ -199,8 +342,11 @@ def drchrono_appointments(request):
             o['wait_time_seconds'] = int((o['seen_time'] - o['arrived_time']).total_seconds())
             o['wait_time_display'] = seconds_to_text((o['scheduled_time'] - o['seen_time']).total_seconds())
 
+    print(data)
+
     return render(request, 'drchrono/appointments.html',
         {'appointments': data,
+         'today_date':   now.astimezone(pytz.timezone('US/Eastern')).strftime('%F'),
          'today':        now.astimezone(pytz.timezone('US/Eastern')).strftime('%A, %B %e'),
          'waittimes_sum': int(sum(waittimes)),
          'waittimes_len': len(waittimes),
@@ -326,12 +472,33 @@ def kiosk_demographics(request):
                 continue;
 
             if rp_v != v:
+                # see note in utils.py for this function :-(
+                if k == 'preferred_language':
+                    rp_v = ISO_639_reverse(rp_v)
+
                 print('UPDATE: {}, {!r} <> {!r}'.format(k, v, rp_v))
                 patchdata[k] = rp_v
 
+                setattr(patient, k, rp_v) # <-+----- necesssary for local sync because
+                                          #   |      we don't get webhook events for
+    patient.save()           # <--------------/      patient changes
+
     print(patchdata)
 
-    patch_patient(request, patient.id, patchdata)
+    try:
+        patch_patient(request, patient.id, patchdata)
+    except Exception as e:
+        print('failed to store demographic update: {}'.format(patchdata))
+
+    # because the API isn't sending me any webhooks other than APPOINTMENT_*
+    # let's push this manually. unfortunately this [currently] means that
+    # our local Model will be out of sync with what we just pushed to the
+    # API as we trigger Model sync on webhook receipt
+    data = {'object':model_to_dict(patient),
+            'receiver':{'owning_doctor_id':request.session['doctor']}
+           }
+    webhook_s.send(sender=None, hook_model='PATIENT', hook_action='MODIFY', data=data)
+
 
     doctor = request.session['doctor']
     return render(request, 'kiosk/checked_in.html', {'doctor':Doctor.objects.get(id=doctor)})
@@ -367,25 +534,30 @@ def ajax_see_patient(request):
     id          = request.POST.get('id')
     status:str  = request.POST.get('status')
 
-    appt   = Appointment.objects.get(id=id)
+    try:
+        appt   = Appointment.objects.get(id=id)
 
-    if status == "true":
-        status = "In Session"
-    else:
-        status = appt.prior_status
+        if status == "true":
+            status = "In Session"
+        else:
+            status = appt.prior_status
 
-    if status == 'In Session':
-        appt.seen_time = datetime.datetime.now(pytz.utc)
-    else:
-        appt.seen_time = None
+        if status == 'In Session':
+            appt.seen_time = datetime.datetime.now(pytz.utc)
+        else:
+            appt.seen_time = None
 
-    appt.prior_status = appt.status
-    appt.status = status
-    appt.save()
+        appt.prior_status = appt.status
+        appt.status = status
+        appt.save()
 
-    patch_appointment(request, id, {'status':status})
+        patch_appointment(request, id, {'status':status})
 
-    return JsonResponse({'hi':'tyty', 'status':status})
+        return JsonResponse({'hi':'tyty', 'status':status})
+
+    except:
+        return JsonResponse({'hi':'tyty', 'status':'failed'})
+
 
 
 @fstamp
@@ -645,8 +817,6 @@ def ajax_checkin_complete(request):
     a.status = 'Checked In'
     a.arrived_time = datetime.datetime.now(pytz.utc)
     a.save()
-
-    request.session['drchrono_patient_checked_in']=a.patient.id
 
     for k,v in a:
         print('  {:>30}: {!r}'.format(k,v))
