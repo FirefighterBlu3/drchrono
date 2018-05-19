@@ -7,8 +7,8 @@
 
 <h2><center>Appointments for {{ today }} <span class="glyphicon glyphicon-refresh"></span></center></h2>
 <br>
-<table class="table table-condensed table-striped table-appointments">
-    <thead">
+<table class="table table-condensed table-striped table-appointments" today-date="{{ today_date }}">
+    <thead>
         <tr>
             <th></th>
             <th>Name</th>
@@ -24,17 +24,17 @@
     </thead>
     <tbody>
         {% for a in appointments %}
-            <tr patient-id="{{ a.id }}">
-                <td><img class="patient-photo" src="{{ a.patient.patient_photo }}"/></td>
-                <td>{{ a.patient.first_name }} {{ a.patient.last_name }}</td>
-                <td>{{ a.preferred_language_full }}</td>
+            <tr appointment-id="{{ a.id }}" patient-id="{{ a.patient.id }}">
+                <td class="patient-photo"><img class="patient-photo" src="{{ a.patient.patient_photo }}"/></td>
+                <td class="name">{{ a.patient.first_name }} {{ a.patient.last_name }}</td>
+                <td class="preferred-language">{{ a.preferred_language_full }}</td>
                 <td class="scheduled-time align-as-clocktime">
                     <span class="scheduled-time-epoch">{{ a.scheduled_time|date:"U" }}</span>
                     <span class="scheduled-time-display">{{ a.scheduled_time|time:"g:iA"|lower }}, {{ a.duration }}m
                     </span>
                 </td>
-                <td>{{ a.exam_room }}</td>
-                <td>{{ a.reason }}</td>
+                <td class="exam-room">{{ a.exam_room }}</td>
+                <td class="reason">{{ a.reason }}</td>
                 <td class="status">{{ a.status }}</td>
                 <td class="arrived-time">
                     <span class="arrived-time-epoch">{{ a.arrived_time|date:"U" }}</span>
