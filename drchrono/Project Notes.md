@@ -5,6 +5,7 @@ This is an interview project to understand how I, the candidate, approach proble
 My implementation of this project is considerably more detailed than is likely to be produced as I had certain circumstances that deviated dramatically from the norm.
 
 Base requirements of the task are:
+
 * account association flow where doctor can authenticate using their drchrono account
   * then set up the kiosk for their office
 * after the doctor is logged in, a page should be displayed that lets patients check in
@@ -21,7 +22,7 @@ Base requirements of the task are:
 
 
 
-Technologies
+Technologies:
 
 * Nginx with letsencrypt SSL certificates
 * Python 3.6
@@ -46,7 +47,7 @@ Technologies
   * GPU utilization triggers
 * WAMP
   * CrossbarIO Web Application Messaging Protocol ~v18.5
-  * python-autobahn client drives real-time updates for the Doctor's appointment page (in process)
+  * python-autobahn client drives real-time updates for the Doctor's appointment page
 * drchrono API
   * social_django oauth2 authentication
   * doctor, office, patient, appointment loading
@@ -90,9 +91,7 @@ Goals and TODO
 * allow doctor to set local timezone
 * put a HOME button on kiosk path that takes user back to patient check-in
 * put HOME button on dr path that takes user back to ...
-* employ webhooks with the API so cache updates can happen asynchronously (needs wamp for appointment page redraw)
-  * trigger a reload at midnight by our server (probably use Celery)
-* build a WAMP router and component so web page data can be updated real-time without page reloads (initial build created)
+* trigger a cache reload after midnight by our server (probably use Celery)
 * need aesthetic continuity in check-in page
 * make doctor appt page date selectable and selectable width (1day, 1wk..)
 * patient check-in ought to toast a message that the person has been [un]successfully checked in (ajax xhr happens as demographics are ajax fetched)
@@ -105,26 +104,39 @@ Goals and TODO
 * mock tests, currently there's zilch
 * some view functions have gotten a bit fat and ought to be rewritten using a sub-function or two to clearly confine operations
 * perhaps show patient photo in the demographics or check-in sections?
+* finish wiring up the WAMP create/delete in appt page
+* if an appointment date changes, unset the arrived_time, and seen*
+* if the last row is removed from the appointment table, void the wait time for today
+* hardwired office appointment start time, no profile used
+* hardwired min-office visit block is 30 minutes
+* a new page load for patient check-in does not consider if the patient has already checked in and will restart the wait-time and appointment status
 
 
 Bugs
 
-* hardwired office appointment start time, no profile used
-* hardwired min-office visit block is 30 minutes
 * not all input is sanitized
-* a new page load for patient check-in does not consider if the patient has already checked in and will restart the wait-time and appointment status
 * errors that redirect to the check-in page ought to fade away so the next patient doesn't see them
 * clicking 'back' in the browser to the check-in page may result in an 'invalid date' indication due to HTML5 date widget not recovering all its state
-* avg wait time for today (breaks/negative value) if you leave the timer running all day or if you check in on a different day
-* appointment creation doesn't gracefully handle overlap or duplication
-* on tablets, the date widget doesn't handly my CSS cleanly
+* wait times for today (breaks/negative value) if you leave the timer running all day or if you check in on a different day or appointments are moved from day to day
+* walk-in appointment creation doesn't gracefully handle overlap or duplication
+* on tablets, the date widget doesn't handle my CSS cleanly
 * a number of API interactions don't respond cleanly if the appt/pt is deleted external to the app (webhooks don't always arrive to update me, actually, no DELETE have arrived, ever)
+* saving a patient's preferred language doesn't work right because we don't have a reverse of full-form to 639-2
 
 
+=======================================================
+Bugs to report to drchrono:
 
 API notes
 * Patient Modification webhooks aren't being performed although requested
 * Appointment creation endpoint would help a lot if it returned the new appointment ID in the response (does this apply to any endpoint that creates objects?)
+* API doesn't like the ISO 639-2 alpha_3 code for "German"; "deu", or is it all?
 
 
-What I would really love to do, is write a large set of single method sample implementations for each endpoint of the API that show exactly how something should be used
+
+API via $user.drchrono.com notes
+* changing appointment exam room 0 to drop down selection (1-4) will create four instances of the appointment
+
+
+
+What I would really love to do, is write documentation for a large set of single method sample implementations for each endpoint of the API that show exactly how something should be used
