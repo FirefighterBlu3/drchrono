@@ -41,13 +41,16 @@ $(document).ready(function() {
      *       accurate updates is the heavy network traffic
      */
     setInterval(function() {
-        var avg, wtsa=[], wtsa_overall=[];
+        var avg, now, wtsa=[], wtsa_overall=[];
+
+        // now is in UTC
+        now = ~~ (Date.now()/1000);
+        //console.log(now);
+        $('th#avg-wait-time-for-today').text('');
 
         // find all patients that have checked in
         $('td.arrived-time').each(function() {
-            var now, seen, seen_in_db, arrived_time, ws, wt;
-
-            now = ~~ (Date.now()/1000)
+            var seen, seen_in_db, arrived_time, ws, wt;
 
             arrived_time = $(this)
                 .children('span.arrived-time-epoch')
@@ -56,16 +59,18 @@ $(document).ready(function() {
             seen = $(this)
                 .siblings('td.see-patient')
                 .children('input')
-                .is(':checked')
+                .is(':checked');
 
             seen_in_db = $(this)
                 .siblings('td.see-patient')
                 .children('input')
-                .attr('seen-in-db') === 'true'
+                .attr('seen-in-db') === 'true';
 
             // do live updates for these EXCEPT if the 'seen' box is checked
             if (arrived_time.length > 0 && seen !== true) {
-                ws = parseInt(now - arrived_time)
+                ws = parseInt(now - arrived_time);
+                //console.log(ws);
+
                 wt = secondsToNotation(ws);
 
                 $(this)
@@ -84,9 +89,12 @@ $(document).ready(function() {
                 ws = parseInt($(this)
                     .next()
                     .children('span.wait-time-seconds')
-                    .text())
+                    .text());
 
-                wtsa.push(ws)
+                if (ws !== NaN) {
+                    wtsa.push(ws);
+                }
+                console.log(wtsa);
             }
 
             // sum up all the wait times overall, skip those with the seen-in-db attribute
@@ -95,9 +103,9 @@ $(document).ready(function() {
                 ws = parseInt($(this)
                         .next()
                         .children('span.wait-time-seconds')
-                        .text())
+                        .text());
 
-                wtsa_overall.push(ws)
+                wtsa_overall.push(ws);
             }
 
         });
@@ -132,7 +140,7 @@ $(document).ready(function() {
         // store context for during POST chain
         _this   = $(this);
 
-        id      = $(_this).parent('tr').attr('patient-id');
+        id      = $(_this).parent('tr').attr('appointment-id');
         checked = $(_this).children('input').is(':checked');
         csrf    = $('input[name=csrfmiddlewaretoken]').val();
         data    = { id: id,
@@ -144,7 +152,7 @@ $(document).ready(function() {
             $(_this)
                 .parent('tr')
                 .find('td.status')
-                .text(r.status)
+                .text(r.status);
         });
     });
 
