@@ -43,6 +43,7 @@
                             "chain_certificates": [
                                 "/etc/letsencrypt/live/drc.blue-labs.org/chain.pem"
                             ],
+                            "dhparam": "dhparam.pem",
                             "ciphers": "ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+3DES:DH+3DES:RSA+AES:RSA+3DES:!ADH:!AECDH:!MD5:!DSS"
                         }
                     },
@@ -50,7 +51,11 @@
                     },
                     "websocket": {
                         "ws": {
-                            "type": "websocket"
+                            "type": "websocket",
+                            "options": {
+                                "auto_ping_interval": 10000,
+                                "echo_close_codereason": true
+                            }
                         }
                     },
                     "web": {
@@ -58,6 +63,11 @@
                             "/": {
                                 "type": "static",
                                 "directory": "../web"
+                            },
+                            "rest-bridge": {
+                                "type": "publisher",
+                                "realm": "drchrono",
+                                "role": "anonymous"
                             }
                         }
                     }
