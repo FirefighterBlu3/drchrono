@@ -79,6 +79,29 @@ Technologies:
 
 
 
+Operation flow:
+
+* Doctor sign-in
+* Doctor chooses mode (appointment view or kiosk)
+  * Appointment View:
+    * Render appointment page
+      * click checkbox to see patients (AJAX update)
+
+  * Kiosk:
+    * <Cache is primed for Patients and Appointments>
+    * Patient Check-in
+      * Name and DoB entry (AJAX update)
+      * Appointment time confirmation (AJAX update)
+      * Demographics updates
+        * Thank you (reverts to Patient Check-in)
+
+AJAX updates may push data to the API which
+- in turn the API should fire off a webhook. Said webhook view will update our models and will
+- fire off a POST to our WAMP REST bridge
+- to which the Doctor's appointment page has subscriptions for changing data
+
+
+
 Notes
 
 * This application is not really intended for high performance. It exists as a small unit with few resources and a marginally optimized Sqlite DB
