@@ -18,7 +18,7 @@ $(document).ready(function() {
 
     function find_appointment_slot() {
         $.ajax({
-            url:      '/ajax/walkin/find_time/',
+            url:      '/ajax/find_walkin_tm/',
             dataType: 'jsonp',
             data:     {},
 
@@ -71,7 +71,7 @@ $(document).ready(function() {
 
         csrf = $('input[name=csrfmiddlewaretoken]').val();
         aj = $.post({
-            url:      '/ajax/checkin/complete/',
+            url:      '/ajax/checkin/check_in/',
             dataType: 'json',
             data: {
                 name: name,

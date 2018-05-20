@@ -4,7 +4,7 @@ $(document).ready(function() {
 
     $('.glyphicon-refresh').on('click', function(){
         // ignore results, just trigger the view
-        $.get('/doctor/appointments/refresh');
+        $.get('/dr/appointments/refresh/');
     });
 
     /*
@@ -148,7 +148,7 @@ $(document).ready(function() {
                     csrfmiddlewaretoken: csrf,
                   };
 
-        $.post('/ajax/see-patient/', data, function(r) {
+        $.post('/dr/see-patient/', data, function(r) {
             $(_this)
                 .parent('tr')
                 .find('td.status')

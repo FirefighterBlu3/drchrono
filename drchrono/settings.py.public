@@ -69,7 +69,7 @@ ROOT_URLCONF = 'drchrono.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates').replace('\\','/'),],
+        'DIRS': [os.path.join(BASE_DIR, 'templates').replace('\\', '/'),],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -117,15 +117,16 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-# since we're running from the command line, django/wsgi can't figure out our scheme is HTTPS
+# since we're running from the command line, django/wsgi can't figure
+# out our scheme is HTTPS
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = True
-USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT     = True
+USE_X_FORWARDED_HOST    = True
 
-SOCIAL_AUTH_DRCHRONO_KEY='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-SOCIAL_AUTH_DRCHRONO_SECRET='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-SOCIAL_AUTH_DRCHRONO_SCOPE=['patients:summary:read patients:summary:write patients:read patients:write calendar:read calendar:write clinical:read clinical:write user:read']
+SOCIAL_AUTH_DRCHRONO_KEY    = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+SOCIAL_AUTH_DRCHRONO_SECRET = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+SOCIAL_AUTH_DRCHRONO_SCOPE  = ['patients:summary:read patients:summary:write patients:read patients:write calendar:read calendar:write clinical:read clinical:write user:read']
 
 SOCIAL_AUTH_DRCHRONO_LOGIN_REDIRECT_URL='https://drc.blue-labs.org/home/'
-#SOCIAL_AUTH_LOGIN_REDIRECT_URL = 'https://DRC.blue-labs.org/complete/drchrono/'
+# SOCIAL_AUTH_LOGIN_REDIRECT_URL = 'https://DRC.blue-labs.org/complete/drchrono/'
 SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
