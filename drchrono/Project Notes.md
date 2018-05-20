@@ -28,7 +28,8 @@ Technologies:
 * Python 3.6
   * datetime objects with correct TZ localization
   * UTF-8 content properly handled
-  * variable annotation and decorators
+  * f strings
+  * function and variable annotation, decorators
 * Django 1.11.1
   * Session values
   * Models with validators, FK
