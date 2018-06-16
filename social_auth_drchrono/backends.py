@@ -1,11 +1,6 @@
-import os
 import pytz
 import datetime
 import logging
-import inspect
-#import requests
-
-from dateutil.parser import parse as dateparse
 
 from social_core.backends.oauth import BaseOAuth2
 from social_django.models import UserSocialAuth
@@ -13,7 +8,8 @@ from social_django.models import UserSocialAuth
 from drchrono.models import Office, Doctor
 from drchrono.utils import fstamp, json_get
 
-api='https://drchrono.com/api'
+api = 'https://drchrono.com/api'
+
 
 class drchronoOAuth2(BaseOAuth2):
     """
@@ -33,14 +29,11 @@ class drchronoOAuth2(BaseOAuth2):
     # TODO: setup proper token refreshing
     REFRESH_TOKEN_URL   = ACCESS_TOKEN_URL
 
-
-
     @fstamp
     def get_auth_header(self, access_token):
         #logger = logging.getLogger(__name__)
         #logger.warn("access_token={}".format(access_token))
         return {'Authorization': 'Bearer {0}'.format(access_token)}
-
 
     @fstamp
     def user_data(self, access_token, *args, **kwargs):
@@ -56,7 +49,6 @@ class drchronoOAuth2(BaseOAuth2):
             headers=self.get_auth_header(access_token)
         )
 
-
     @fstamp
     def get_user_details(self, response):
         """
@@ -64,7 +56,7 @@ class drchronoOAuth2(BaseOAuth2):
         """
 
         # this shows our initial scope data, leave it for dbg
-        print('response data: {}'.format(response))
+        print('get_user_details() response data: {}'.format(response))
 
         user = UserSocialAuth.objects.get().user
 
@@ -80,7 +72,7 @@ class drchronoOAuth2(BaseOAuth2):
         # get expanded doctor info; proper name components
         data = json_get(api+'/doctors', headers=headers)
         print('doc_data:{}'.format(data))
-        doc_data = [e for e in data if e['id']==response['doctor']][0]
+        doc_data = [e for e in data if e['id'] == response['doctor']][0]
 
         # get doctor's offices
         office_data = json_get(api+'/offices', headers=headers)
@@ -90,8 +82,8 @@ class drchronoOAuth2(BaseOAuth2):
             doc = Doctor.objects.get(user=user)
         except Doctor.DoesNotExist:
             doc = Doctor(
-                    id   = response['doctor'],
-                    user = user,
+                    id  =response['doctor'],
+                    user=user,
                 )
         finally:
             doc.first_name        = doc_data['first_name'],
@@ -101,12 +93,11 @@ class drchronoOAuth2(BaseOAuth2):
             doc.refresh_token     = refresh_token
             doc.expires_timestamp = expires_timestamp
             print('Saving doc: {}'.format(user))
-            for k,v in doc:
-                print('  {:>30}: {}'.format(k,v))
+            for k, v in doc:
+                print('  {:>30}: {}'.format(k, v))
 
             doc.save()
             print('Doc saved: {}/{} ({})'.format(doc.id, doc, user))
-
 
         oids = [o['id'] for o in office_data]
 
@@ -115,7 +106,7 @@ class drchronoOAuth2(BaseOAuth2):
                 office = Office.objects.get(id=e['id'])
             except:
                 office = Office(
-                        id = e['id']
+                        id=e['id']
                     )
             finally:
                 office.name         = e['name']
@@ -127,14 +118,13 @@ class drchronoOAuth2(BaseOAuth2):
 
         # delete any offices in our local db that doesn't exist in the API
         for o in Office.objects.all():
-            if not o.id in oids:
+            if o.id not in oids:
                 print('Office {}/{} is not in API'.format(o.id, o.name))
                 o.delete()
 
         del oids
 
         return {'username': response['username']}
-
 
     @fstamp
     def refresh_token(self, token, *args, **kwargs):
@@ -145,4 +135,3 @@ class drchronoOAuth2(BaseOAuth2):
                                data=params, headers=self.auth_headers(),
                                method='POST')
         return self.process_refresh_token_response(request, *args, **kwargs)
-
