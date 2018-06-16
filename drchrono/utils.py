@@ -1,8 +1,3 @@
-from django.db.models import ForeignKey
-from social_django.models import UserSocialAuth
-
-from .models import Patient, Appointment
-
 import requests
 import pycountry
 import datetime
@@ -13,6 +8,13 @@ import re
 from functools import wraps
 from operator import itemgetter
 from dateutil.parser import parse as dateparse
+
+from django.db.models import ForeignKey
+from social_django.models import UserSocialAuth
+from django.utils import timezone
+
+from .models import Doctor, Patient, Appointment
+
 
 api = 'https://drchrono.com/api'
 
@@ -147,6 +149,7 @@ def update_patient_cache(request, get_all: bool = False, doctor: int = None,
 
     print('Fetching all patients')
     patients = json_get(api+'/patients', params=data, headers=headers)
+    print(patients)
 
     print('Priming cache for {} patients'.format(len(patients)))
     for n, p in enumerate(patients):
