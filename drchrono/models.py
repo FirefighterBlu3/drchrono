@@ -33,7 +33,7 @@ class Doctor(models.Model):
     id           = models.IntegerField(primary_key=True)
     first_name   = models.CharField(max_length=30)
     last_name    = models.CharField(max_length=30)
-    user         = models.OneToOneField(User)
+    user         = models.OneToOneField(User, on_delete=models.CASCADE)
     office       = models.IntegerField(default=3456)
 
     access_token      = models.CharField(max_length=200)
@@ -90,7 +90,8 @@ class Appointment(models.Model):
     id                      = models.IntegerField(primary_key=True)
     scheduled_time          = models.DateTimeField()
     patient                 = models.ForeignKey(Patient,
-                                                related_name='id+')
+                                                related_name='id+',
+                                                on_delete=models.CASCADE)
     duration                = models.IntegerField(default=30)
     reason                  = models.CharField(max_length=64, default="")
     status                  = models.CharField(max_length=30, default="",

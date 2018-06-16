@@ -13,7 +13,7 @@ from operator                     import itemgetter
 # Django
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models.functions   import Concat
-from django.core.urlresolvers     import reverse
+from django.urls                  import reverse
 from django.core.exceptions       import SuspiciousOperation
 from django.contrib.auth          import logout
 from django.db.models             import Q, Value, CharField
